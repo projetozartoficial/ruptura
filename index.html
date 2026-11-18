@@ -23,8 +23,6 @@
     <div class="menu-box">
       <div id="acct" class="acct"></div>
       <button id="login-gate" class="btn big gbtn" data-act="login" style="justify-content:center"><b style="color:#4285f4;font-size:20px">G</b> Entrar com Google para jogar</button>
-      <label class="lbl">Seu nome de caçador</label>
-      <input id="in-name" maxlength="14" placeholder="Digite seu nome" autocomplete="off">
       <button class="btn big" data-act="solo">▶ Treino contra bots</button>
       <button class="btn big" data-act="host">⚔ Partida padrão com amigos</button>
       <button id="btn-ranked" class="btn big gold" data-act="ranked">✦ Ranqueada · Arena 4v4</button>
@@ -38,6 +36,7 @@
         <label class="radio"><input type="radio" name="net" value="local"> Local (abas do mesmo PC)</label>
       </div>
       <div class="row">
+        <button class="btn ghost" data-act="friends">Amigos<span id="fr-badge" class="badge"></span></button>
         <button class="btn ghost" data-act="profile">Perfil</button>
         <button class="btn ghost" data-act="codex">Caçadores</button>
         <button class="btn ghost" data-act="howto">Como jogar</button>
@@ -46,7 +45,7 @@
       <p id="menu-msg" class="msg"></p>
     </div>
   </div>
-  <div class="ver">v0.3 · Arena 4v4 · Arena de Vésper</div>
+  <div class="ver">v0.4 · Arena 4v4 · Arena de Vésper</div>
 </section>
 
 <!-- ============ LOBBY ============ -->
@@ -60,6 +59,7 @@
       </div>
       <div class="lob-title">Escolha seu time e seu caçador</div>
       <div class="lob-actions">
+        <button class="btn ghost" data-act="friends">Convidar amigos</button>
         <button class="btn ghost" data-act="leave">Sair</button>
         <button id="btn-start" class="btn big gold" data-act="start">Começar partida</button>
       </div>
@@ -187,6 +187,33 @@
     </div>
   </div>
 </section>
+
+<!-- ============ ID Nome#TAG ============ -->
+<div id="nick-modal" class="modal">
+  <div class="modal-box">
+    <h2>Escolha seu ID</h2>
+    <p class="hint">É assim que você vai aparecer no jogo e como seus amigos vão te adicionar.</p>
+    <div class="nick-row">
+      <input id="nk-name" maxlength="14" placeholder="Nome" autocomplete="off">
+      <span class="hash">#</span>
+      <input id="nk-tag" maxlength="5" placeholder="TAG" autocomplete="off">
+    </div>
+    <p class="hint">Nome: 3 a 14 caracteres (letras, números ou _). TAG: 3 a 5 letras ou números.</p>
+    <div id="nk-prev" class="nk-prev"></div>
+    <p id="nk-msg" class="msg"></p>
+    <div class="row center"><button id="nk-cancel" class="btn ghost" data-act="nickcancel">Cancelar</button><button class="btn gold big" data-act="nickok">Confirmar</button></div>
+  </div>
+</div>
+
+<!-- ============ AMIGOS ============ -->
+<aside id="friends" class="friends">
+  <header><h3>Amigos</h3><button class="btn ghost" data-act="friendsclose">✕</button></header>
+  <div id="fr-me" class="fr-me"></div>
+  <div class="row"><input id="fr-add" placeholder="Nome#TAG do amigo" autocomplete="off"><button class="btn" data-act="addfriend">Adicionar</button></div>
+  <p id="fr-msg" class="msg"></p>
+  <div id="fr-list"></div>
+</aside>
+<div id="toasts" class="toasts"></div>
 
 <script src="js/data.js"></script>
 <script src="js/sim.js"></script>

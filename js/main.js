@@ -52,7 +52,13 @@ function trackPerf(raw) {
 // ------------------------------------------------------------------
 //  Telas e utilidades
 // ------------------------------------------------------------------
-function show(id) { $$('.screen').forEach(s => s.classList.toggle('active', s.id === 'scr-' + id)); App.screen = id; }
+function show(id) {
+  $$('.screen').forEach(s => s.classList.toggle('active', s.id === 'scr-' + id)); App.screen = id;
+  const online = (App.role === 'host' || App.role === 'client') && App.net === 'online';
+  const st = id === 'game' ? 'jogo' : id === 'lobby' ? 'sala' : 'menu';
+  if (Account.pres.status !== st || Account.pres.room !== (online ? App.code : null)) Account.presence({ status: st, room: online && id !== 'game' ? App.code : null, kind: App.kind });
+  if (id === 'game') $('#friends').classList.remove('show');
+}
 function msg(sel, t) { $(sel).textContent = t || ''; }
 function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function genCode() { const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 5; i++) s += A[(Math.random() * A.length) | 0]; return s; }
@@ -63,10 +69,11 @@ function portrait(h, size) { const k = h + size; if (!portraitCache.has(k)) port
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   SFX.init(); SFX.play('click');
-  if (['solo', 'host', 'ranked', 'join'].includes(b.dataset.act) && !Account.logged) {
+  if (['solo', 'host', 'ranked', 'join', 'friends'].includes(b.dataset.act) && !Account.logged) {
     msg('#menu-msg', Account.enabled ? 'Entre com sua conta Google para jogar.' : 'O login ainda não está configurado (js/firebase-config.js).');
     return;
   }
+  if (['solo', 'host', 'ranked', 'join', 'friends'].includes(b.dataset.act) && Account.needsNick) { openNick(true); return; }
   ({
     solo: () => startSolo(), host: () => startHost('standard'), ranked: () => startRankedParty(), join: () => startJoin(),
     codex: () => { buildCodex(); show('codex'); }, howto: () => show('howto'), back: () => show('menu'),
@@ -75,6 +82,12 @@ document.addEventListener('click', e => {
     resume: () => togglePause(false), quit: () => leaveRoom(),
     login: () => doLogin(), logout: () => Account.logout(),
     search: () => startSearch(), cancelsearch: () => cancelSearch(), vsbots: () => rankedVsBots(),
+    nickok: () => confirmNick(), nickcancel: () => $('#nick-modal').classList.remove('show'), editnick: () => openNick(false),
+    friends: () => { $('#friends').classList.add('show'); renderFriends(); }, friendsclose: () => $('#friends').classList.remove('show'),
+    addfriend: () => addFriend(), fraccept: () => Account.respond(b.dataset.id, true), frdecline: () => Account.respond(b.dataset.id, false),
+    frremove: () => { const f = Account.friends.find(x => x.req === b.dataset.id); if (f) Account.removeFriend(f); },
+    frjoin: () => joinFriendRoom(b.dataset.code), frinvite: () => inviteFriend(b.dataset.uid, b),
+    invjoin: () => acceptInvite(b.dataset.id), invclose: () => { const i = Account.invites.find(x => x.id === b.dataset.id); if (i) Account.dropInvite(i); },
     sound: () => { const on = SFX.toggle(); Settings.sound = on; saveSettings(); b.textContent = 'Som: ' + (on ? 'ligado' : 'desligado'); },
   })[b.dataset.act]?.();
 });
@@ -97,24 +110,19 @@ function renderAcct() {
   el.appendChild(rankCanvas(P.rank, 92));
   const need = xpNeed(P.level);
   const rk = P.rank >= 0 ? rankName(P.rank) : P.placements > 0 ? `Colocação ${P.placements}/5` : 'Sem ranque';
-  el.insertAdjacentHTML('beforeend', `<div class="ai"><div class="an">${Account.logged ? esc(P.name) : 'Sem conta conectada'}</div><div class="al">${Account.logged ? `Nível ${P.level} · ${rk}` : 'Conecte sua conta Google para jogar'}</div><div class="xpb"><i style="width:${P.xp / need * 100}%"></i></div></div>`);
+  el.insertAdjacentHTML('beforeend', `<div class="ai"><div class="an">${Account.logged ? (P.nickSet ? `${esc(P.name)} <span style="color:var(--dim)">#${esc(P.tag)}</span>` : 'Escolha seu ID') : 'Sem conta conectada'}</div><div class="al">${Account.logged ? `Nível ${P.level} · ${rk}` : 'Conecte sua conta Google para jogar'}</div><div class="xpb"><i style="width:${P.xp / need * 100}%"></i></div></div>`);
   if (Account.logged) el.insertAdjacentHTML('beforeend', `<button class="btn ghost" data-act="logout">Sair</button>`);
-  const inp = $('#in-name'); if (document.activeElement !== inp) inp.value = P.name || '';
   for (const k of ['solo', 'host', 'ranked', 'join']) { const bt = document.querySelector(`#scr-menu [data-act=${k}]`); if (bt) bt.classList.toggle('locked', !Account.logged); }
   $('#login-gate').style.display = Account.logged ? 'none' : '';
+  if (Account.needsNick && !$('#nick-modal').classList.contains('show')) openNick(true);
   if (Account.error) msg('#menu-msg', Account.error);
 }
-$('#in-name').addEventListener('change', () => { const n = $('#in-name').value.trim().slice(0, 14); if (n) Account.setName(n); });
 
 function readName() {
-  let n = $('#in-name').value.trim().slice(0, 14);
-  if (!n) n = 'Caçador' + Math.floor(Math.random() * 90 + 10);
-  App.name = n; $('#in-name').value = n;
-  if (Account.profile && Account.profile.name !== n) Account.setName(n);
-  try { localStorage.setItem('ruptura-name', n); } catch (e) { }
+  App.name = Account.profile ? Account.profile.name : 'Caçador';
   App.net = document.querySelector('input[name=net]:checked').value;
 }
-function mySlotInfo() { const s = Account.summary(); return { uid: s.uid, lvl: s.level, rank: s.rank, mmr: s.mmr, pl: s.placements }; }
+function mySlotInfo() { const s = Account.summary(); return { uid: s.uid, tag: s.tag, lvl: s.level, rank: s.rank, mmr: s.mmr, pl: s.placements }; }
 
 // ------------------------------------------------------------------
 //  Lobby (o dono da sala é a autoridade)
@@ -209,7 +217,7 @@ function hostOnMsg(pid, m) {
     if (App.kind === 'ranked' && App.search && App.search.active) { App.tr.send(pid, { t: 'full', why: 'Esse grupo está na fila. Peça para cancelarem a busca.' }); return; }
     if (!m.uid) { App.tr.send(pid, { t: 'full', why: 'Só jogadores com conta conectada podem entrar.' }); return; }
     const id = App.nextPid++;
-    const info = { id, name: String(m.name || 'Caçador').slice(0, 14), pref: m.pref, uid: m.uid || null, lvl: m.lvl || 1, rank: m.rank ?? -1, mmr: m.mmr || 1000, pl: m.pl || 0 };
+    const info = { id, name: String(m.name || 'Caçador').slice(0, 14), tag: String(m.tag || '').slice(0, 5), pref: m.pref, uid: m.uid || null, lvl: m.lvl || 1, rank: m.rank ?? -1, mmr: m.mmr || 1000, pl: m.pl || 0 };
     if (!placeHuman(info, App.kind === 'ranked' ? (m.team === 1 ? 1 : 0) : undefined)) { App.tr.send(pid, { t: 'full', why: 'Sala cheia.' }); return; }
     App.peers.set(pid, { id, name: info.name });
     App.tr.send(pid, { t: 'welcome', id, kind: App.kind });
@@ -253,7 +261,7 @@ function renderLobby() {
         d.appendChild(portrait(s.hunter, 88));
         const H = HUNTERS[s.hunter], C = CLASSES[H.classe];
         const info = document.createElement('div'); info.style.flex = '1';
-        info.innerHTML = `<div class="nm">${esc(s.name)}${s.id === App.myId ? ' (você)' : ''}</div><div class="hn" style="color:${C.cor}">${H.nome} · ${C.nome}${s.lvl ? ` <span style="color:var(--dim)">· Nv ${s.lvl}</span>` : ''}</div>`;
+        info.innerHTML = `<div class="nm">${esc(s.name)}${s.tag ? ` <span class="tg">#${esc(s.tag)}</span>` : ''}${s.id === App.myId ? ' (você)' : ''}</div><div class="hn" style="color:${C.cor}">${H.nome} · ${C.nome}${s.lvl ? ` <span style="color:var(--dim)">· Nv ${s.lvl}</span>` : ''}</div>`;
         d.appendChild(info);
         if (s.kind === 'human' && (App.kind === 'ranked' || s.rank >= 0)) { const rc = rankCanvas(s.rank ?? -1, 68); rc.className = 'rk'; rc.title = rankName(s.rank ?? -1); d.appendChild(rc); }
       }
@@ -443,7 +451,11 @@ function meP(S) { return S.players.find(p => p.id === App.myId); }
 // ------------------------------------------------------------------
 const keys = {}; const mouse = { sx: 0, sy: 0, wx: 0, wy: 0, l: false, r: false };
 addEventListener('keydown', e => {
-  if (e.target.tagName === 'INPUT') { if (e.key === 'Enter' && e.target.id === 'in-code') startJoin(); return; }
+  if (e.target.tagName === 'INPUT') {
+    if (e.key === 'Enter' && e.target.id === 'in-code') startJoin();
+    if (e.key === 'Enter' && (e.target.id === 'nk-name' || e.target.id === 'nk-tag')) confirmNick();
+    return;
+  }
   const k = e.key.toLowerCase(); keys[k] = true;
   if (App.screen === 'game') {
     if (k === 'tab') { e.preventDefault(); $('#tabboard').classList.add('show'); buildTab(); }
@@ -671,7 +683,7 @@ function buildProfile() {
   if (P.rank >= 0) rankLine = `<div class="prof-rank">${rankName(P.rank)}</div><div class="bar rr"><i style="width:${Math.min(100, P.rr)}%"></i></div><div class="hint">${P.rank >= RANK_MAX ? P.rr + ' RR' : P.rr + ' / 100 RR'} · pico: ${rankName(P.peak)}</div>`;
   else if (lock) rankLine = `<div class="prof-rank">Ranqueada bloqueada</div><div class="hint">Libera no nível ${window.RANKED_MIN_LEVEL} de conta.</div>`;
   else rankLine = `<div class="prof-rank">Sem ranque</div><div class="hint">Partidas de colocação: ${P.placements}/5</div>`;
-  let html = `<div class="prof-top"><div id="pf-emb"></div><div><div class="prof-name">${esc(P.name)}</div>${rankLine}</div>
+  let html = `<div class="prof-top"><div id="pf-emb"></div><div><div class="prof-name">${esc(P.name)}${P.tag ? ` <span style="color:var(--dim);font-size:22px">#${esc(P.tag)}</span>` : ''}</div>${Account.logged ? '<button class="btn ghost" data-act="editnick" style="padding:5px 10px;font-size:12px;margin:4px 0">Alterar ID</button>' : ''}${rankLine}</div>
     <div style="min-width:220px"><div class="lbl">Nível de conta</div><div style="font-size:30px;font-weight:800">${P.level}</div><div class="bar xp"><i style="width:${P.xp / xpNeed(P.level) * 100}%"></i></div><div class="hint">${P.xp} / ${xpNeed(P.level)} XP</div>
     <div class="hint" style="margin-top:6px">${Account.logged ? 'Conta Google conectada' : Account.enabled ? 'Convidado — entre com Google no menu para salvar na conta' : 'Convidado (progresso salvo só neste navegador)'}</div></div></div>`;
   html += `<div class="grid-stats"><div><b>${s.matches}</b><span>PARTIDAS</span></div><div><b>${s.wins}</b><span>VITÓRIAS</span></div><div><b>${wr}%</b><span>% VITÓRIA</span></div><div><b>${s.kills}</b><span>ABATES</span></div><div><b>${s.deaths ? (s.kills / s.deaths).toFixed(2) : s.kills}</b><span>K/D</span></div><div><b>${s.matches ? Math.round(s.dmg / s.matches) : 0}</b><span>DANO/PARTIDA</span></div></div>`;
@@ -706,6 +718,104 @@ function buildCodex() {
     d.insertAdjacentHTML('beforeend', `<div><h3>${H.nome}</h3><div class="tt">${H.titulo}</div><div class="cl" style="color:${C.cor}">${C.icone} ${C.nome} — ${C.desc}</div><div class="stats">Vida ${H.hp} · Velocidade ${H.speed}</div><p>${H.lore}</p><div class="abl">${ab}</div></div>`);
     L.appendChild(d);
   }
+}
+
+// ------------------------------------------------------------------
+//  ID Nome#TAG
+// ------------------------------------------------------------------
+function openNick(forced) {
+  const P = Account.profile;
+  $('#nk-name').value = P.nickSet ? P.name : (P.name || '');
+  $('#nk-tag').value = P.nickSet ? P.tag : randomTag();
+  $('#nk-cancel').style.display = forced ? 'none' : '';
+  msg('#nk-msg', ''); nickPreview();
+  $('#nick-modal').classList.add('show');
+  setTimeout(() => $('#nk-name').focus(), 50);
+}
+function nickPreview() {
+  const n = $('#nk-name').value.trim(), t = $('#nk-tag').value.trim().toUpperCase();
+  $('#nk-prev').innerHTML = n ? `${esc(n)} <small>#${esc(t)}</small>` : '';
+}
+$('#nk-name').addEventListener('input', nickPreview);
+$('#nk-tag').addEventListener('input', () => { $('#nk-tag').value = $('#nk-tag').value.replace(/[^A-Za-z0-9]/g, '').toUpperCase(); nickPreview(); });
+async function confirmNick() {
+  msg('#nk-msg', 'Salvando...');
+  try { await Account.claimNick($('#nk-name').value, $('#nk-tag').value); $('#nick-modal').classList.remove('show'); msg('#nk-msg', ''); }
+  catch (e) { msg('#nk-msg', e.message); }
+}
+
+// ------------------------------------------------------------------
+//  Amigos e convites
+// ------------------------------------------------------------------
+Account.onSocial(() => { renderFriends(); renderToasts(); });
+function friendStatus(f) {
+  const p = f.pres;
+  if (!p || Date.now() - p.t > 75000) return { cls: '', txt: 'Offline' };
+  if (p.status === 'jogo') return { cls: 'game', txt: 'Em partida' };
+  if (p.status === 'sala' && p.room) return { cls: 'on', txt: `Em sala · ${p.room}`, room: p.room };
+  return { cls: 'on', txt: 'Online no menu' };
+}
+function renderFriends() {
+  const n = Account.incoming.length;
+  $('#fr-badge').textContent = n ? String(n) : '';
+  if (!$('#friends').classList.contains('show')) return;
+  $('#fr-me').innerHTML = Account.logged ? `Seu ID: <b>${esc(Account.fullId)}</b><br>Passe ele para seus amigos te adicionarem.` : '';
+  const canInvite = (App.role === 'host' || App.role === 'client') && App.net === 'online' && App.screen === 'lobby';
+  let h = '';
+  if (Account.incoming.length) {
+    h += '<h4>PEDIDOS RECEBIDOS</h4>';
+    for (const r of Account.incoming) h += `<div class="fr"><div class="fi"><div class="fn">${esc(r.fromName)} <small>#${esc(r.fromTag)}</small></div></div><button class="btn gold" data-act="fraccept" data-id="${r.id}">Aceitar</button><button class="btn ghost" data-act="frdecline" data-id="${r.id}">✕</button></div>`;
+  }
+  const order = { game: 1, on: 0, '': 2 };
+  const fr = Account.friends.map(f => ({ f, s: friendStatus(f) })).sort((a, b) => order[a.s.cls] - order[b.s.cls] || a.f.name.localeCompare(b.f.name));
+  h += `<h4>AMIGOS (${fr.length})</h4>`;
+  if (!fr.length) h += '<div class="hint">Adicione amigos pelo ID Nome#TAG.</div>';
+  for (const { f, s } of fr) {
+    let btns = '';
+    if (s.room && s.room !== App.code) btns += `<button class="btn gold" data-act="frjoin" data-code="${esc(s.room)}">Entrar</button>`;
+    if (canInvite && s.cls && s.cls !== 'game') btns += `<button class="btn" data-act="frinvite" data-uid="${f.uid}">Convidar</button>`;
+    btns += `<button class="btn ghost" data-act="frremove" data-id="${f.req}" title="Remover amigo">✕</button>`;
+    h += `<div class="fr"><span class="dot ${s.cls}"></span><div class="fi"><div class="fn">${esc(f.name)} <small>#${esc(f.tag)}</small></div><div class="fs">${s.txt}</div></div>${btns}</div>`;
+  }
+  if (Account.outgoing.length) {
+    h += '<h4>PEDIDOS ENVIADOS</h4>';
+    for (const r of Account.outgoing) h += `<div class="fr"><div class="fi"><div class="fn">${esc(r.toName)} <small>#${esc(r.toTag)}</small></div><div class="fs">Aguardando resposta</div></div><button class="btn ghost" data-act="frdecline" data-id="${r.id}">Cancelar</button></div>`;
+  }
+  $('#fr-list').innerHTML = h;
+}
+async function addFriend() {
+  msg('#fr-msg', '...');
+  try { const r = await Account.addFriend($('#fr-add').value); $('#fr-add').value = ''; msg('#fr-msg', ''); $('#fr-msg').innerHTML = `<span style="color:#7dff95">${esc(r)}</span>`; }
+  catch (e) { msg('#fr-msg', e.message); }
+}
+$('#fr-add').addEventListener('keydown', e => { if (e.key === 'Enter') addFriend(); });
+async function inviteFriend(uid, btn) {
+  const f = Account.friends.find(x => x.uid === uid); if (!f) return;
+  try { await Account.invite(f, App.code); btn.textContent = 'Convidado ✓'; btn.disabled = true; } catch (e) { msg('#fr-msg', e.message); }
+}
+function joinFriendRoom(code) {
+  if (App.inGame) return;
+  if (App.role !== 'none') leaveRoom();
+  document.querySelector('input[name=net][value=online]').checked = true;
+  $('#friends').classList.remove('show');
+  readName(); App.net = 'online';
+  startJoin(code);
+}
+const seenInv = new Set();
+function renderToasts() {
+  const box = $('#toasts'); box.innerHTML = '';
+  for (const i of Account.invites) {
+    if (!seenInv.has(i.id + i.t)) { seenInv.add(i.id + i.t); SFX.play('round', 0); }
+    const d = document.createElement('div'); d.className = 'toast';
+    d.innerHTML = `<span>${esc(i.fromName)}<small style="color:var(--dim)">#${esc(i.fromTag)}</small> te convidou pra sala <b style="color:var(--gold)">${esc(i.code)}</b></span><button class="btn gold" data-act="invjoin" data-id="${i.id}">Entrar</button><button class="btn ghost" data-act="invclose" data-id="${i.id}">✕</button>`;
+    box.appendChild(d);
+  }
+}
+function acceptInvite(id) {
+  const i = Account.invites.find(x => x.id === id); if (!i) return;
+  Account.dropInvite(i);
+  if (App.inGame) return;
+  joinFriendRoom(i.code);
 }
 
 // ------------------------------------------------------------------

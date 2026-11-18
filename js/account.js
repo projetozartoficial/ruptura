@@ -23,7 +23,7 @@ function rankFromMMR(m) { return clamp(Math.round((m - 640) / 55), 0, RANK_MAX);
 function xpNeed(level) { return 400 + 50 * level; }
 
 function newProfile(name) {
-  return { name: name || 'Caçador', level: 1, xp: 0, mmr: 1000, rank: -1, rr: 0, placements: 0, peak: -1,
+  return { name: name || 'Caçador', tag: '', nickSet: false, level: 1, xp: 0, mmr: 1000, rank: -1, rr: 0, placements: 0, peak: -1,
     stats: { matches: 0, wins: 0, kills: 0, deaths: 0, dmg: 0, heal: 0 }, hunters: {}, history: [], created: Date.now() };
 }
 function fixProfile(p, name) {
@@ -140,6 +140,9 @@ function drawRankEmblem(c, idx, size) {
 function rankCanvas(idx, size) { const cv = document.createElement('canvas'); cv.width = cv.height = size; drawRankEmblem(cv.getContext('2d'), idx, size); return cv; }
 
 // ---------------- Conta ----------------
+const NICK_RE = /^[\p{L}\p{N}_]{3,14}$/u, TAG_RE = /^[A-Za-z0-9]{3,5}$/;
+function nickKey(name, tag) { return (String(name).trim() + '#' + String(tag).trim()).toLowerCase(); }
+function randomTag() { return String(1000 + Math.floor(Math.random() * 9000)); }
 const FB_VER = '10.12.2';
 function loadScript(src) { return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('Falha ao carregar ' + src)); document.head.appendChild(s); }); }
 
@@ -162,8 +165,8 @@ const Account = {
       this.db = firebase.firestore();
       firebase.auth().onAuthStateChanged(async u => {
         this.user = u;
-        if (u) { try { await this.loadRemote(); } catch (e) { this.error = 'Erro ao carregar perfil: ' + e.message; this.profile = this.local; } }
-        else this.profile = this.local;
+        if (u) { try { await this.loadRemote(); this.startSocial(); } catch (e) { this.error = 'Erro ao carregar perfil: ' + e.message; this.profile = this.local; } }
+        else { this.stopSocial(); this.profile = this.local; }
         this.emit();
       });
     } catch (e) { this.enabled = false; this.error = 'Login indisponível aqui (' + e.message + ')'; this.emit(); }
@@ -177,13 +180,13 @@ const Account = {
       else if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') throw e;
     }
   },
-  async logout() { if (this.enabled) await firebase.auth().signOut(); },
+  async logout() { if (this.enabled) { try { await this.db.collection('presence').doc(this.user.uid).delete(); } catch (e) { } await firebase.auth().signOut(); } },
   ref() { return this.db.collection('users').doc(this.user.uid); },
   async loadRemote() {
     const snap = await this.ref().get();
     if (snap.exists) this.profile = fixProfile(snap.data(), this.user.displayName);
     else {
-      this.profile = newProfile((this.local.name && !/^Caçador\d+$/.test(this.local.name)) ? this.local.name : (this.user.displayName || 'Caçador').split(' ')[0].slice(0, 14));
+      this.profile = newProfile((this.user.displayName || 'Caçador').split(' ')[0].replace(/[^\p{L}\p{N}_]/gu, '').slice(0, 14));
       await this.save();
     }
   },
@@ -193,7 +196,88 @@ const Account = {
     else { this.local = p; try { localStorage.setItem('ruptura-profile', JSON.stringify(p)); } catch (e) { } }
   },
   async setName(n) { if (!n || this.profile.name === n) return; this.profile.name = n; try { await this.save(); } catch (e) { } this.emit(); },
-  summary() { const p = this.profile; return { uid: this.user ? this.user.uid : null, level: p.level, rank: p.rank, mmr: p.mmr, placements: p.placements }; },
+  summary() { const p = this.profile; return { uid: this.user ? this.user.uid : null, tag: p.tag || '', level: p.level, rank: p.rank, mmr: p.mmr, placements: p.placements }; },
+  get needsNick() { return this.logged && !this.profile.nickSet; },
+  get fullId() { const p = this.profile; return p.tag ? `${p.name}#${p.tag}` : p.name; },
+  // reserva o ID Nome#TAG (único, sem diferenciar maiúsculas)
+  async claimNick(name, tag) {
+    name = String(name || '').trim(); tag = String(tag || '').trim().toUpperCase();
+    if (!NICK_RE.test(name)) throw new Error('O nome precisa ter de 3 a 14 caracteres (letras, números ou _).');
+    if (!TAG_RE.test(tag)) throw new Error('A TAG precisa ter de 3 a 5 letras ou números.');
+    const key = nickKey(name, tag), uid = this.user.uid, P = this.profile;
+    const oldKey = P.nickSet && P.tag ? nickKey(P.name, P.tag) : null;
+    await this.db.runTransaction(async tx => {
+      const ref = this.db.collection('nicks').doc(key);
+      const snap = await tx.get(ref);
+      if (snap.exists && snap.data().uid !== uid) throw new Error(`${name}#${tag} já está em uso. Tente outra TAG.`);
+      tx.set(ref, { uid, name, tag });
+      if (oldKey && oldKey !== key) tx.delete(this.db.collection('nicks').doc(oldKey));
+    });
+    P.name = name; P.tag = tag; P.nickSet = true;
+    await this.save(); this.presence(); this.emit();
+  },
+  // ---------- presença (online / em sala / em partida) ----------
+  pres: { status: 'menu', room: null },
+  presence(patch) {
+    if (patch) Object.assign(this.pres, patch);
+    if (!this.logged || !this.profile.nickSet) return;
+    const P = this.profile;
+    this.db.collection('presence').doc(this.user.uid).set({ name: P.name, tag: P.tag, rank: P.rank, level: P.level, t: Date.now(), status: this.pres.status, room: this.pres.room || null }).catch(() => { });
+  },
+  // ---------- amigos ----------
+  friends: [], incoming: [], outgoing: [], invites: [], _unsubs: [],
+  startSocial() {
+    this.stopSocial();
+    const uid = this.user.uid, R = this.db.collection('friendReqs');
+    const refresh = () => this.emitSocial();
+    let a = [], b = [];
+    const merge = () => {
+      this.incoming = a.filter(r => r.status === 'pending');
+      this.outgoing = b.filter(r => r.status === 'pending');
+      this.friends = a.filter(r => r.status === 'accepted').map(r => ({ uid: r.from, name: r.fromName, tag: r.fromTag, req: r.id }))
+        .concat(b.filter(r => r.status === 'accepted').map(r => ({ uid: r.to, name: r.toName, tag: r.toTag, req: r.id })));
+      this.loadPresence().then(refresh); refresh();
+    };
+    this._unsubs.push(R.where('to', '==', uid).onSnapshot(q => { a = q.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => { }));
+    this._unsubs.push(R.where('from', '==', uid).onSnapshot(q => { b = q.docs.map(d => ({ id: d.id, ...d.data() })); merge(); }, () => { }));
+    this._unsubs.push(this.db.collection('invites').where('to', '==', uid).onSnapshot(q => {
+      this.invites = q.docs.map(d => ({ id: d.id, ...d.data() })).filter(i => Date.now() - i.t < 120000);
+      refresh();
+    }, () => { }));
+    this._presIv = setInterval(() => { this.presence(); this.loadPresence().then(refresh); }, 30000);
+    this.presence();
+  },
+  stopSocial() { for (const u of this._unsubs) try { u(); } catch (e) { } this._unsubs = []; clearInterval(this._presIv); this.friends = []; this.incoming = []; this.outgoing = []; this.invites = []; },
+  socialSubs: [], onSocial(fn) { this.socialSubs.push(fn); }, emitSocial() { for (const f of this.socialSubs) try { f(this); } catch (e) { console.error(e); } },
+  async loadPresence() {
+    await Promise.all(this.friends.map(async f => {
+      try { const d = await this.db.collection('presence').doc(f.uid).get(); f.pres = d.exists ? d.data() : null; if (f.pres) { f.name = f.pres.name; f.tag = f.pres.tag; } } catch (e) { }
+    }));
+  },
+  async addFriend(id) {
+    const m = String(id || '').trim().match(/^(.+?)\s*#\s*([A-Za-z0-9]{3,5})$/);
+    if (!m) throw new Error('Digite o ID completo, no formato Nome#TAG.');
+    const snap = await this.db.collection('nicks').doc(nickKey(m[1], m[2])).get();
+    if (!snap.exists) throw new Error('Ninguém encontrado com esse ID.');
+    const to = snap.data(), uid = this.user.uid;
+    if (to.uid === uid) throw new Error('Esse é você!');
+    if (this.friends.some(f => f.uid === to.uid)) throw new Error('Vocês já são amigos.');
+    const back = this.incoming.find(r => r.from === to.uid);
+    if (back) { await this.respond(back.id, true); return 'Pedido aceito! Agora vocês são amigos.'; }
+    const P = this.profile;
+    await this.db.collection('friendReqs').doc(uid + '_' + to.uid).set({ from: uid, to: to.uid, fromName: P.name, fromTag: P.tag, toName: to.name, toTag: to.tag, status: 'pending', t: Date.now() });
+    return `Pedido enviado para ${to.name}#${to.tag}.`;
+  },
+  async respond(reqId, accept) {
+    const ref = this.db.collection('friendReqs').doc(reqId);
+    if (accept) await ref.update({ status: 'accepted' }); else await ref.delete();
+  },
+  async removeFriend(f) { await this.db.collection('friendReqs').doc(f.req).delete(); },
+  async invite(f, code) {
+    const P = this.profile;
+    await this.db.collection('invites').doc(this.user.uid + '_' + f.uid).set({ from: this.user.uid, to: f.uid, fromName: P.name, fromTag: P.tag, code, t: Date.now() });
+  },
+  async dropInvite(inv) { try { await this.db.collection('invites').doc(inv.id).delete(); } catch (e) { } },
   // registra uma partida terminada
   async record(r) {
     if (this.user && this.db) { try { await this.loadRemote(); } catch (e) { } }
