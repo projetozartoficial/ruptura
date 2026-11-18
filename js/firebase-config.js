@@ -11,8 +11,8 @@
 //  5. Firestore Database > Criar banco de dados (modo produção) e cole as
 //     regras do arquivo firestore.rules (aba "Regras").
 //
-//  Enquanto ficar null, o jogo funciona como convidado (progresso salvo
-//  só neste navegador) e a Ranqueada fica bloqueada.
+//  Só joga quem conectar a conta Google. Enquanto ficar null, ninguém
+//  consegue entrar nas partidas.
 // =====================================================================
 window.FIREBASE_CONFIG = null;
 /* Exemplo:

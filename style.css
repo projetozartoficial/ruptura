@@ -216,3 +216,4 @@ kbd{display:inline-block;background:#262b4d;border:1px solid #4a518a;border-bott
 .rewards .rw span{color:var(--dim);font-size:13px;letter-spacing:1px}
 .rewards canvas{width:70px;height:70px}
 @media (max-width:900px){.grid-stats{grid-template-columns:repeat(3,1fr)}.prof-top{grid-template-columns:1fr}}
+.btn.locked{opacity:.4;filter:grayscale(.6)}

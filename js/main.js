@@ -62,6 +62,10 @@ function portrait(h, size) { const k = h + size; if (!portraitCache.has(k)) port
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   SFX.init(); SFX.play('click');
+  if (['solo', 'host', 'ranked', 'join'].includes(b.dataset.act) && !Account.logged) {
+    msg('#menu-msg', Account.enabled ? 'Entre com sua conta Google para jogar.' : 'O login ainda não está configurado (js/firebase-config.js).');
+    return;
+  }
   ({
     solo: () => startSolo(), host: () => startHost('standard'), ranked: () => startRankedParty(), join: () => startJoin(),
     codex: () => { buildCodex(); show('codex'); }, howto: () => show('howto'), back: () => show('menu'),
@@ -77,7 +81,10 @@ document.addEventListener('click', e => {
 // ------------------------------------------------------------------
 //  Conta
 // ------------------------------------------------------------------
-Account.on(() => { renderAcct(); if (App.screen === 'profile') buildProfile(); });
+Account.on(() => {
+  renderAcct(); if (App.screen === 'profile') buildProfile();
+  if (!Account.logged && App.role !== 'none' && !App.inGame) leaveRoom();
+});
 Account.init();
 async function doLogin() {
   msg('#menu-msg', '');
@@ -89,10 +96,11 @@ function renderAcct() {
   el.appendChild(rankCanvas(P.rank, 92));
   const need = xpNeed(P.level);
   const rk = P.rank >= 0 ? rankName(P.rank) : P.placements > 0 ? `Colocação ${P.placements}/5` : 'Sem ranque';
-  el.insertAdjacentHTML('beforeend', `<div class="ai"><div class="an">${esc(P.name)}</div><div class="al">Nível ${P.level} · ${rk}${Account.logged ? '' : ' · convidado'}</div><div class="xpb"><i style="width:${P.xp / need * 100}%"></i></div></div>`);
+  el.insertAdjacentHTML('beforeend', `<div class="ai"><div class="an">${Account.logged ? esc(P.name) : 'Sem conta conectada'}</div><div class="al">${Account.logged ? `Nível ${P.level} · ${rk}` : 'Conecte sua conta Google para jogar'}</div><div class="xpb"><i style="width:${P.xp / need * 100}%"></i></div></div>`);
   if (Account.logged) el.insertAdjacentHTML('beforeend', `<button class="btn ghost" data-act="logout">Sair</button>`);
-  else el.insertAdjacentHTML('beforeend', `<button class="btn gbtn" data-act="login" ${Account.enabled ? '' : 'title="Configure o Firebase em js/firebase-config.js"'}><b style="color:#4285f4">G</b> Entrar</button>`);
   const inp = $('#in-name'); if (document.activeElement !== inp) inp.value = P.name || '';
+  for (const k of ['solo', 'host', 'ranked', 'join']) { const bt = document.querySelector(`#scr-menu [data-act=${k}]`); if (bt) bt.classList.toggle('locked', !Account.logged); }
+  $('#login-gate').style.display = Account.logged ? 'none' : '';
   if (Account.error) msg('#menu-msg', Account.error);
 }
 $('#in-name').addEventListener('change', () => { const n = $('#in-name').value.trim().slice(0, 14); if (n) Account.setName(n); });
@@ -198,6 +206,7 @@ function hostOnMsg(pid, m) {
     if (App.peers.has(pid)) return;
     if (App.inGame) { App.tr.send(pid, { t: 'full', why: 'A partida já começou. Espere acabar.' }); return; }
     if (App.kind === 'ranked' && App.search && App.search.active) { App.tr.send(pid, { t: 'full', why: 'Esse grupo está na fila. Peça para cancelarem a busca.' }); return; }
+    if (!m.uid) { App.tr.send(pid, { t: 'full', why: 'Só jogadores com conta conectada podem entrar.' }); return; }
     const id = App.nextPid++;
     const info = { id, name: String(m.name || 'Caçador').slice(0, 14), pref: m.pref, uid: m.uid || null, lvl: m.lvl || 1, rank: m.rank ?? -1, mmr: m.mmr || 1000, pl: m.pl || 0 };
     if (!placeHuman(info, App.kind === 'ranked' ? (m.team === 1 ? 1 : 0) : undefined)) { App.tr.send(pid, { t: 'full', why: 'Sala cheia.' }); return; }
@@ -639,7 +648,6 @@ async function showEnd(S, won) {
     }
   }
   if (out.saved === false) html += `<div class="hint">Não consegui salvar: ${esc(out.err)}</div>`;
-  else if (!Account.logged) html += `<div class="hint">Progresso salvo só neste navegador (entre com Google para salvar na conta).</div>`;
   $('#end-rewards').innerHTML = html;
   const rw = $('#rw-rank'); if (rw) rw.prepend(rankCanvas(P.rank, 140));
 }

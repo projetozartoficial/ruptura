@@ -12,7 +12,7 @@ Abra o site do GitHub Pages deste repositório. O multiplayer online usa PeerJS 
 4. **Authentication** → Configurações → Domínios autorizados → adicione `wasmorf.github.io`.
 5. **Firestore Database** → criar banco → aba **Regras** → cole o conteúdo de `firestore.rules`.
 
-Sem configuração, o jogo funciona como convidado (progresso salvo só no navegador) e a Ranqueada fica bloqueada.
+Só joga quem conectar a conta Google (vale para todos os modos). Sem essa configuração, ninguém consegue jogar.
 
 ## Ranqueada (Arena 4v4)
 - Libera no **nível 15** de conta (`RANKED_MIN_LEVEL` em `js/firebase-config.js`).
