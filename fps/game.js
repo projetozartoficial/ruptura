@@ -444,6 +444,7 @@ class Game {
       for (const p of this.players) {
         if (!p.alive || Math.hypot(p.x - z.x, p.z - z.z) > z.r || p.y > 2) continue;
         const enemy = p.team !== z.team;
+        if (z.alarm) { if (enemy) { p.revealT = Math.max(p.revealT, 3); p.slowT = Math.max(p.slowT, 2); p.slowAmt = Math.max(p.slowAmt, 0.5); z.t = 0; this.emit({ k: 'alarm', x: z.x, z: z.z, team: z.team }); } continue; }
         if (z.dps && (enemy || p.id === z.owner)) this.hurt(p, z.dps * dt, this.byId(z.owner), 'body', z.kind, true); // dano contínuo
         if (z.slow && enemy) { p.slowT = Math.max(p.slowT, 0.2); p.slowAmt = Math.max(p.slowAmt, z.slow); }
       }
@@ -464,6 +465,11 @@ class Game {
       this.hurt(p, dmg * (1 - d / r * 0.65), src, 'body', kind);
     }
     this.emit({ k: 'boom', x, y, z, r, kind });
+  }
+  addTracer(t) { this.tracers.push(t); this.emit({ k: 'trc', t: [r2(t.x0), r2(t.y0), r2(t.z0), r2(t.x1), r2(t.y1), r2(t.z1)], bolt: t.bolt || 0, chain: t.chain || 0, ttl: t.t }); }
+  pull(t, src, force) {
+    const dx = src.x - t.x, dz = src.z - t.z, d = Math.hypot(dx, dz) || 1;
+    t.vx = dx / d * force; t.vz = dz / d * force; t.dashT = 0.3;
   }
   alertBots(p, r) { for (const q of this.players) if (q.bot && q.alive && q.team !== p.team && Math.hypot(q.x - p.x, q.z - p.z) < r) { q.brain = q.brain || {}; q.brain.alert = { x: p.x, z: p.z, t: this.t }; } }
   canSee(a, b) { // a vê b? (olhos até cabeça/peito)
@@ -510,9 +516,74 @@ const GRENADE_END = {
     for (const p of G.players) if (p.alive && p.team !== g.team && Math.hypot(p.x - g.x, p.z - g.z) < 4.5) { p.stunT = Math.max(p.stunT, 1.4); G.hurt(p, 15, G.byId(g.owner), 'body', 'pedra'); }
     G.emit({ k: 'boom', x: g.x, y: g.y, z: g.z, r: 4.5, kind: 'stone' });
   },
-  smoke(G, g) { G.smokes.push({ x: g.x, y: 1.6, z: g.z, r: 3.7, t: 15, T: 15, team: g.team }); G.emit({ k: 'smoke', x: g.x, z: g.z }); },
+  smoke(G, g) { G.smokes.push({ x: g.x, y: 1.6, z: g.z, r: g.r || 3.7, t: g.dur || 15, T: g.dur || 15, team: g.team, col: g.col || 0 }); G.emit({ k: 'smoke', x: g.x, z: g.z }); },
+  spores(G, g) { G.zones.push({ kind: 'spores', x: g.x, z: g.z, r: 3.4, t: 5, T: 5, dps: 28, team: g.team, owner: g.owner }); G.emit({ k: 'splash', x: g.x, z: g.z }); },
+  anchor(G, g) {
+    for (const p of G.players) if (p.alive && p.team !== g.team && Math.hypot(p.x - g.x, p.z - g.z) < 4) { p.stunT = Math.max(p.stunT, 1.3); G.hurt(p, 25, G.byId(g.owner), 'body', 'ancora'); }
+    G.emit({ k: 'boom', x: g.x, y: g.y, z: g.z, r: 4, kind: 'stone' });
+  },
 };
+function dashMove(G, p, speed, dur) {
+  const I = p.in, cy = Math.cos(p.yaw), sy = Math.sin(p.yaw); let mx = I.mx, mz = I.mz; if (!mx && !mz) mz = 1;
+  const l = Math.hypot(mx, mz), wx = (sy * mz + cy * mx) / l, wz = (-cy * mz + sy * mx) / l;
+  p.vx = wx * speed; p.vz = wz * speed; p.dashT = dur; G.emit({ k: 'dash', id: p.id });
+}
 const ABILITY = {
+  lamina: {
+    c(G, p) { dashMove(G, p, 22, 0.25); },
+    q(G, p) { if (!p.onGround) return false; p.vy = 11; p.onGround = false; G.emit({ k: 'dash', id: p.id }); },
+    e(G, p) { const d = fwdVec(p.yaw, 0); GRENADE_END.smoke(G, { x: p.x + d[0] * 5, y: 1.6, z: p.z + d[2] * 5, team: p.team, r: 2.6, dur: 4, col: 1 }); },
+    x(G, p) {
+      const ey = G.eye(p);
+      for (let i = -2; i <= 2; i++) {
+        const d = fwdVec(p.yaw + i * 0.025, p.pitch), h = G.trace(p.x, ey, p.z, d[0], d[1], d[2], 60, p);
+        if (h.p) G.hurt(h.p, h.zone === 'head' ? 150 : 55, p, h.zone, 'laminas');
+        G.addTracer({ x0: p.x, y0: ey - 0.1, z0: p.z, x1: p.x + d[0] * h.t, y1: ey + d[1] * h.t, z1: p.z + d[2] * h.t, t: 0.12, owner: p.id });
+      }
+    },
+  },
+  trovao: {
+    c(G, p) {
+      const ey = G.eye(p), d = fwdVec(p.yaw, p.pitch), h = G.trace(p.x, ey, p.z, d[0], d[1], d[2], 30, p);
+      if (h.p && h.p.team !== p.team) { G.hurt(h.p, 60, p, 'body', 'raio'); h.p.stunT = Math.max(h.p.stunT, 1.2); }
+      G.addTracer({ x0: p.x, y0: ey - 0.1, z0: p.z, x1: p.x + d[0] * h.t, y1: ey + d[1] * h.t, z1: p.z + d[2] * h.t, t: 0.25, owner: p.id, bolt: 1 });
+      G.emit({ k: 'bolt', id: p.id });
+    },
+    q(G, p) { G.throwG(p, 'flash', 16, { fuse: 0.7, lift: 0.1 }); },
+    e(G, p) { for (const q of G.players) if (q.alive && q.team !== p.team && Math.hypot(q.x - p.x, q.z - p.z) < 16) q.revealT = 3; G.emit({ k: 'reveal', x: p.x, z: p.z, r: 16, team: p.team }); },
+    x(G, p) { const [x, , z] = G.aimPoint(p, 40); G.zones.push({ kind: 'storm', x, z, r: 7, t: 6, T: 6, slow: 0.3, dps: 40, team: p.team, owner: p.id }); G.emit({ k: 'boom', x, y: 3, z, r: 7, kind: 'storm' }); },
+  },
+  vinha: {
+    c(G, p) { const [x, , z] = G.aimPoint(p, 25); G.zones.push({ kind: 'roots', x, z, r: 3.5, t: 3, T: 3, slow: 0.85, team: p.team, owner: p.id }); G.emit({ k: 'splash', x, z }); },
+    q(G, p) { G.throwG(p, 'spores', 14, { onLand: true }); },
+    e(G, p) { const [x, , z, t] = G.aimPoint(p, 38); G.grenades.push({ kind: 'smoke', owner: p.id, team: p.team, x, y: 1.6, z, vx: 0, vy: 0, vz: 0, fuse: Math.min(1, t / 40 + 0.2), grav: 0, dur: 14, col: 2 }); },
+    x(G, p) {
+      const [x, , z] = G.aimPoint(p, 40);
+      for (let i = 0; i < 3; i++) { const a = i * 2.09; GRENADE_END.smoke(G, { x: x + Math.cos(a) * 6, y: 1.6, z: z + Math.sin(a) * 6, team: p.team, dur: 12, col: 2 }); }
+      G.zones.push({ kind: 'roots', x, z, r: 8, t: 6, T: 6, slow: 0.6, team: p.team, owner: p.id });
+    },
+  },
+  sino: {
+    c(G, p) { G.zones.push({ kind: 'alarm', x: p.x, z: p.z, r: 4, t: 90, T: 90, alarm: true, team: p.team, owner: p.id }); G.emit({ k: 'barrier', x: p.x, z: p.z }); },
+    q(G, p) { for (const q of G.players) if (q.alive && q.team !== p.team && Math.hypot(q.x - p.x, q.z - p.z) < 8) q.stunT = Math.max(q.stunT, 1.4); G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 8, kind: 'bell' }); },
+    e(G, p) { let n = 0; for (const q of G.players) if (q.alive && q.team === p.team && Math.hypot(q.x - p.x, q.z - p.z) < 8 && q.hp < 100) { q.healT = Math.max(q.healT, 40); n++; } if (!n) return false; G.emit({ k: 'heal', id: p.id, by: p.id }); },
+    x(G, p) { for (const q of G.players) if (q.alive && q.team === p.team && Math.hypot(q.x - p.x, q.z - p.z) < 20) { q.hp = 100; q.armor = Math.min(100, q.armor + 50); } G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 20, kind: 'bell' }); },
+  },
+  ancora: {
+    c(G, p) {
+      const ey = G.eye(p), d = fwdVec(p.yaw, p.pitch), h = G.trace(p.x, ey, p.z, d[0], d[1], d[2], 22, p);
+      if (h.p && h.p.team !== p.team) { G.pull(h.p, p, 14); h.p.stunT = Math.max(h.p.stunT, 0.9); G.hurt(h.p, 20, p, 'body', 'corrente'); }
+      G.addTracer({ x0: p.x, y0: ey - 0.1, z0: p.z, x1: p.x + d[0] * h.t, y1: ey + d[1] * h.t, z1: p.z + d[2] * h.t, t: 0.3, owner: p.id, chain: 1 });
+    },
+    q(G, p) { G.throwG(p, 'anchor', 14, { onLand: true }); },
+    e(G, p) {
+      const d = fwdVec(p.yaw, 0), cx = p.x + d[0] * 2.2, cz = p.z + d[2] * 2.2, px = -d[2], pz = d[0];
+      for (let i = -1; i <= 1; i++) { const x = cx + px * i * 1.2, z = cz + pz * i * 1.2; G.temp.push({ x0: x - 0.6, x1: x + 0.6, y0: 0, y1: 1.35, z0: z - 0.6, z1: z + 0.6, t: 10, T: 10, vis: false, solid: true, kind: 'iron' }); }
+      G.solids = G.M.solids.concat(G.temp.filter(w => w.solid));
+      G.emit({ k: 'barrier', x: cx, z: cz });
+    },
+    x(G, p) { for (const q of G.players) if (q.alive && q.team !== p.team && Math.hypot(q.x - p.x, q.z - p.z) < 15) { G.pull(q, p, 9); q.slowT = Math.max(q.slowT, 3); q.slowAmt = Math.max(q.slowAmt, 0.5); } G.emit({ k: 'boom', x: p.x, y: 0.5, z: p.z, r: 15, kind: 'quake' }); },
+  },
   brasa: {
     c(G, p) { G.throwG(p, 'molotov', 14, { onLand: true }); },
     q(G, p) {
@@ -723,6 +794,9 @@ function botAbility(G, p, T, d) {
   if (p.hunter === 'mare' && k === 'c') return;
   if (p.hunter === 'brasa' && k === 'q') return;
   if (p.hunter === 'corvo' && k === 'e') return;
+  if (p.hunter === 'lamina' && k !== 'e') return;
+  if (p.hunter === 'sino' && k === 'e') return;
+  if (p.hunter === 'ancora' && k === 'e') return;
   I.ab = k;
 }
 function botUlt(G, p, T) {

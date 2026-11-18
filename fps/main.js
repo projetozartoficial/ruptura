@@ -407,12 +407,15 @@ function handleEvents(evs) {
         break;
       }
       case 'match': showEnd(e.w === me.team); break;
-      case 'boom': burst(e.x, e.y + 0.3, e.z, e.kind === 'quake' ? 40 : 60, e.kind === 'stone' || e.kind === 'quake' ? [0.6, 0.5, 0.4] : [1, 0.55, 0.15], e.r * 1.2); AU.noise(0.6, 400, 0.6 * AU.at(e.x, e.z)); if (Math.hypot(e.x - me.x, e.z - me.z) < e.r * 2) App.shake = 0.6; break;
+      case 'boom': burst(e.x, e.y + 0.3, e.z, e.kind === 'quake' ? 40 : 60, e.kind === 'stone' || e.kind === 'quake' ? [0.6, 0.5, 0.4] : e.kind === 'storm' ? [0.7, 0.6, 1] : e.kind === 'bell' ? [1, 0.9, 0.5] : [1, 0.55, 0.15], Math.min(e.r * 1.2, 12)); AU.noise(0.6, 400, 0.6 * AU.at(e.x, e.z)); if (Math.hypot(e.x - me.x, e.z - me.z) < e.r * 2) App.shake = 0.6; break;
       case 'flash': burst(e.x, e.y, e.z, 30, [1, 1, 1], 6); AU.tone(2400, 1800, 0.3, 0.2 * AU.at(e.x, e.z)); break;
       case 'smoke': AU.noise(0.8, 600, 0.3 * AU.at(e.x, e.z)); break;
       case 'fire': AU.noise(0.6, 900, 0.3 * AU.at(e.x, e.z)); break;
       case 'splash': AU.noise(0.5, 1200, 0.25 * AU.at(e.x, e.z), 0.5, 'bandpass'); break;
       case 'reveal': case 'hunt': AU.tone(400, 1200, 0.4, 0.15); break;
+      case 'alarm': if (e.team === me.team) { banner('', 'O Sino Vigia tocou!', 1200); } AU.tone(1300, 1300, 0.5, 0.2 * AU.at(e.x, e.z)); break;
+      case 'trc': if (App.role === 'client') { const t = e.t; G.tracers.push({ x0: t[0], y0: t[1], z0: t[2], x1: t[3], y1: t[4], z1: t[5], t: e.ttl, bolt: e.bolt, chain: e.chain }); } break;
+      case 'bolt': AU.noise(0.3, 3000, 0.4 * (p ? AU.at(p.x, p.z) : 1), 0.5, 'highpass'); break;
       case 'step': if (e.id !== me.id) AU.noise(0.05, 300, 0.2 * AU.at(e.x, e.z) ** 2); else AU.noise(0.04, 250, 0.06); break;
       case 'reload': if (e.id === me.id) AU.tone(400, 300, 0.15, 0.1, 'square'); break;
       case 'ability': if (e.id === me.id) AU.tone(500, 900, 0.15, 0.15, 'triangle'); if (p && p.team !== me.team && p.hunter === 'brasa' && e.key === 'x') banner('', 'Foguete inimigo!', 900); break;
@@ -495,18 +498,21 @@ function drawWorld(T, dt) {
   // granadas
   for (const g of G.grenades) gl.box(g.x, g.y, g.z, 0.18, 0.18, 0.18, g.kind === 'rocket' ? [1, 0.5, 0.2] : g.kind === 'flash' ? [1, 1, 0.9] : [0.4, 0.4, 0.45], { emis: g.kind === 'rocket' || g.kind === 'flash' ? 1 : 0, ry: T * 8 });
   // barreiras sólidas
-  for (const w of G.temp) if (w.solid) gl.box((w.x0 + w.x1) / 2, (w.y0 + w.y1) / 2, (w.z0 + w.z1) / 2, w.x1 - w.x0, w.y1 - w.y0, w.z1 - w.z0, [1, 0.88, 0.5], { emis: 0.35 });
+  for (const w of G.temp) if (w.solid) gl.box((w.x0 + w.x1) / 2, (w.y0 + w.y1) / 2, (w.z0 + w.z1) / 2, w.x1 - w.x0, w.y1 - w.y0, w.z1 - w.z0, w.kind === 'iron' ? [0.45, 0.48, 0.52] : [1, 0.88, 0.5], { emis: w.kind === 'iron' ? 0 : 0.35, mat: w.kind === 'iron' ? 4 : undefined });
   // efeitos transparentes
   gl.blend(true);
   for (const z of G.zones) {
-    const c = z.kind === 'fire' ? [1, 0.45, 0.1] : z.kind === 'flood' ? [0.2, 0.5, 0.9] : z.kind === 'slow' ? [1, 0.9, 0.4] : [0.2, 0.6, 1];
+    if (z.kind === 'alarm' && z.team !== me.team) continue; // o sino vigia fica escondido do inimigo
+    const c = { fire: [1, 0.45, 0.1], flood: [0.2, 0.5, 0.9], slow: [1, 0.9, 0.4], storm: [0.6, 0.4, 1], roots: [0.3, 0.7, 0.2], spores: [0.6, 0.9, 0.2], alarm: [1, 0.85, 0.3] }[z.kind] || [0.2, 0.6, 1];
+    if (z.kind === 'alarm') { gl.box(z.x, 0.25, z.z, 0.35, 0.5, 0.35, [1, 0.85, 0.3], { emis: 0.6 }); continue; }
+    if (z.kind === 'storm' && Math.random() < 0.3) App.parts.push({ x: z.x + rnd(-z.r, z.r) * 0.7, y: rnd(0.5, 4), z: z.z + rnd(-z.r, z.r) * 0.7, vx: 0, vy: -6, vz: 0, t: 0.4, T: 0.4, col: [0.8, 0.7, 1], s: 0.08, glow: 1 });
     gl.box(z.x, 0.04, z.z, z.r * 2, 0.06, z.r * 2, c, { a: 0.45, emis: 0.6 });
     if (z.kind === 'fire' && Math.random() < 0.6) App.parts.push({ x: z.x + rnd(-z.r, z.r) * 0.7, y: 0.1, z: z.z + rnd(-z.r, z.r) * 0.7, vx: 0, vy: rnd(1, 3), vz: 0, t: 0.6, T: 0.6, col: [1, 0.6, 0.15], s: 0.15, glow: 1 });
   }
   for (const w of G.temp) if (!w.solid) gl.box((w.x0 + w.x1) / 2, (w.y0 + w.y1) / 2, (w.z0 + w.z1) / 2, w.x1 - w.x0, w.y1 - w.y0, w.z1 - w.z0, [0.25, 0.55, 0.85], { a: 0.75, emis: 0.3 });
   for (const s of G.smokes) {
     const f = Math.min(1, (s.T - s.t) / 0.6, s.t / 0.8);
-    for (let i = 0; i < 3; i++) gl.ball(s.x + Math.sin(T * 0.3 + i * 2) * 0.3, s.y - i * 0.2, s.z + Math.cos(T * 0.3 + i * 2) * 0.3, s.r * 2 * f * (1 - i * 0.1), s.r * 1.8 * f * (1 - i * 0.1), s.r * 2 * f * (1 - i * 0.1), [0.72, 0.8, 0.9], { a: 0.6 + i * 0.15, ry: i * 0.5 + T * 0.1 });
+    for (let i = 0; i < 3; i++) gl.ball(s.x + Math.sin(T * 0.3 + i * 2) * 0.3, s.y - i * 0.2, s.z + Math.cos(T * 0.3 + i * 2) * 0.3, s.r * 2 * f * (1 - i * 0.1), s.r * 1.8 * f * (1 - i * 0.1), s.r * 2 * f * (1 - i * 0.1), s.col === 2 ? [0.35, 0.6, 0.3] : s.col === 1 ? [0.85, 0.9, 0.95] : [0.72, 0.8, 0.9], { a: 0.6 + i * 0.15, ry: i * 0.5 + T * 0.1 });
   }
   gl.blend(false);
   // traçantes e partículas (aditivo)
@@ -514,7 +520,8 @@ function drawWorld(T, dt) {
   for (const t of G.tracers) {
     const dx = t.x1 - t.x0, dy = t.y1 - t.y0, dz = t.z1 - t.z0, l = Math.hypot(dx, dy, dz);
     if (l < 0.5) continue;
-    gl.boxM(M4.trs((t.x0 + t.x1) / 2, (t.y0 + t.y1) / 2, (t.z0 + t.z1) / 2, Math.atan2(dx, dz), -Math.asin(dy / l), 0, 0.025, 0.025, l), [1, 0.85, 0.5], { emis: 1, a: 0.8 });
+    const tw = t.bolt ? 0.09 : t.chain ? 0.06 : 0.025;
+    gl.boxM(M4.trs((t.x0 + t.x1) / 2, (t.y0 + t.y1) / 2, (t.z0 + t.z1) / 2, Math.atan2(dx, dz), -Math.asin(dy / l), 0, tw, tw, l), t.bolt ? [0.7, 0.6, 1] : t.chain ? [0.6, 0.65, 0.7] : [1, 0.85, 0.5], { emis: 1, a: 0.8 });
   }
   for (const q of App.parts) { q.t -= dt; q.x += q.vx * dt; q.y += q.vy * dt; q.z += q.vz * dt; q.vy -= (q.glow ? -1 : 9) * dt; if (q.y < 0) { q.y = 0; q.vy *= -0.3; } gl.box(q.x, q.y, q.z, q.s, q.s, q.s, q.col, { emis: 1, a: Math.max(0, q.t / q.T) }); }
   App.parts = App.parts.filter(q => q.t > 0);

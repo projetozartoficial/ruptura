@@ -110,5 +110,37 @@ const FPS_HUNTERS = {
     x: { nome: 'Terremoto', desc: 'Atordoa todos os inimigos num raio enorme ao seu redor.' },
   },
 };
+Object.assign(FPS_HUNTERS, {
+  lamina: {
+    c: { nome: 'Corte de Vento', preco: 200, max: 2, desc: 'Avanço rápido e longo na direção em que você anda.' },
+    q: { nome: 'Corrente Ascendente', preco: 150, max: 1, desc: 'Um salto altíssimo para pegar ângulos de cima.' },
+    e: { nome: 'Rajada', free: 1, desc: 'Nuvem curta de vento bem na sua frente (4s). Bloqueia a visão.' },
+    x: { nome: 'Leque de Lâminas', desc: 'Arremessa 5 lâminas de uma vez na mira (muito dano na cabeça).' },
+  },
+  trovao: {
+    c: { nome: 'Raio', preco: 250, max: 1, desc: 'Um raio em linha reta: dano e atordoa quem acertar.' },
+    q: { nome: 'Clarão', preco: 250, max: 2, desc: 'Clarão que cega quem estiver olhando.' },
+    e: { nome: 'Pulso Elétrico', free: 1, desc: 'Revela inimigos num raio de 16m ao seu redor por 3s.' },
+    x: { nome: 'Tempestade', desc: 'Cria uma tempestade na mira: dano e lentidão por 6s.' },
+  },
+  vinha: {
+    c: { nome: 'Raízes', preco: 200, max: 1, desc: 'Raízes no chão que quase prendem quem passa (3s).' },
+    q: { nome: 'Esporos', preco: 250, max: 2, desc: 'Nuvem de esporos venenosos que fere quem fica dentro.' },
+    e: { nome: 'Cortina de Folhas', free: 2, desc: 'Cortina verde onde você mira (14s). Bloqueia a visão.' },
+    x: { nome: 'Floresta Viva', desc: 'Três cortinas e raízes enormes ao redor do ponto mirado.' },
+  },
+  sino: {
+    c: { nome: 'Sino Vigia', preco: 200, max: 1, desc: 'Deixa um sino no chão: quando um inimigo passa, ele é revelado e fica lento.' },
+    q: { nome: 'Badalo', preco: 250, max: 1, desc: 'Som forte ao seu redor que atordoa inimigos próximos.' },
+    e: { nome: 'Canto', free: 1, desc: 'Cura 40 de vida em você e nos aliados perto.' },
+    x: { nome: 'Réquiem', desc: 'Aliados perto ganham vida cheia e 50 de escudo.' },
+  },
+  ancora: {
+    c: { nome: 'Corrente', preco: 250, max: 1, desc: 'Lança uma corrente: o primeiro inimigo atingido é puxado e atordoado.' },
+    q: { nome: 'Âncora Pesada', preco: 200, max: 1, desc: 'Arremessa a âncora: atordoa quem estiver perto da queda.' },
+    e: { nome: 'Escudo de Ferro', free: 1, desc: 'Ergue uma parede de ferro baixa na sua frente (10s).' },
+    x: { nome: 'Maré Baixa', desc: 'Puxa e deixa lentos todos os inimigos num raio enorme.' },
+  },
+});
 const FPS_HUNTER_IDS = Object.keys(FPS_HUNTERS);
-const FPS_ULT = { brasa: 7, corvo: 6, mare: 7, lumi: 8, rocha: 7 };
+const FPS_ULT = { brasa: 7, corvo: 6, mare: 7, lumi: 8, rocha: 7, lamina: 7, trovao: 7, vinha: 7, sino: 7, ancora: 7 };
