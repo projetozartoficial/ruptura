@@ -14,7 +14,15 @@
 //  Só joga quem conectar a conta Google. Enquanto ficar null, ninguém
 //  consegue entrar nas partidas.
 // =====================================================================
-window.FIREBASE_CONFIG = null;
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyARVPvyf2SvLo1DB5BoA65mAMuyRvSY9XE",
+  authDomain: "ruptura-f1a70.firebaseapp.com",
+  projectId: "ruptura-f1a70",
+  storageBucket: "ruptura-f1a70.firebasestorage.app",
+  messagingSenderId: "58672897771",
+  appId: "1:58672897771:web:82fac6625fea66dccba8ae",
+  measurementId: "G-474RKCS5QP"
+};
 /* Exemplo:
 window.FIREBASE_CONFIG = {
   apiKey: "AIza...",
