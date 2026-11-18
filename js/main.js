@@ -594,6 +594,25 @@ function renderDraft() {
   renderDraftTimer();
 }
 
+function leaveRoom() {
+  if (App.search) stopSearch(true);
+  if (App.tr) { try { App.tr.close(); } catch (e) { } }
+  clearInterval(App.draftIv); App.draft = null;
+  App.tr = null; App.role = 'none'; App.inGame = false; App.sim = null; App.cs = null; App.paused = false; App.expect = 0; App.vsBots = false;
+  $('#pause').classList.remove('show');
+  renderAcct();
+  show('menu');
+}
+function playAgain() {
+  if (App.matchMode === 'ranked') { leaveRoom(); startRankedParty(); return; }
+  if (App.role === 'client') { show('lobby'); msg('#lob-msg', 'Aguardando o dono da sala...'); return; }
+  App.inGame = false; App.sim = null; App.vsBots = false;
+  App.slots = App.slots.map(s => s.kind === 'human' && (s.id === App.myId || [...App.peers.values()].some(p => p.id === s.id)) ? s : { kind: 'empty' });
+  const me = App.slots[slotOf(App.myId)]; if (me) Object.assign(me, mySlotInfo());
+  if (App.role === 'host') App.tr.broadcast({ t: 'tolobby', slots: App.slots });
+  openLobby();
+}
+
 // ------------------------------------------------------------------
 //  Cliente
 // ------------------------------------------------------------------
