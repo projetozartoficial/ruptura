@@ -342,8 +342,8 @@ function glowSprite(color) {
 }
 const QUALITY = {
   alta:  { dpr: 1.5, fog: 0.5, parts: 1, sky: true, xray: true, name: 'Alta' },
-  media: { dpr: 1, fog: 0.4, parts: 0.6, sky: true, xray: true, name: 'Média' },
-  baixa: { dpr: 0.7, fog: 0.3, parts: 0.3, sky: false, xray: false, name: 'Baixa' },
+  media: { dpr: 0.9, fog: 0.35, parts: 0.55, sky: true, xray: true, name: 'Média' },
+  baixa: { dpr: 0.6, fog: 0.25, parts: 0.25, sky: false, xray: false, name: 'Baixa' },
 };
 
 // ------------------------------------------------------------------
@@ -959,7 +959,7 @@ class Renderer {
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     for (let i = 100; i < p.maxHp; i += 100) ctx.fillRect(x + w * i / tot, y, 1, 7);
     ctx.font = '600 11px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
-    if (this.names !== false) { ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.strokeText(p.name, p.x, y - 5); ctx.fillText(p.name, p.x, y - 5); }
+    if (this.names !== false) { const nm = displayName(p, me); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.strokeText(nm, p.x, y - 5); ctx.fillText(nm, p.x, y - 5); }
   }
   drawReviveBar(ctx, p) {
     const f = Math.min(1, p.revive / 3.5);

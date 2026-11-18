@@ -67,7 +67,7 @@ class Sim {
       const team = i < 4 ? 0 : 1;
       const H = HUNTERS[s.hunter];
       this.players.push({
-        id: s.id, name: s.name, team, hunter: s.hunter, bot: s.kind === 'bot', slot: i,
+        id: s.id, name: s.name, hide: !!s.hide, team, hunter: s.hunter, bot: s.kind === 'bot', slot: i,
         x: 0, y: 0, vx: 0, vy: 0, z: 0, aim: team ? Math.PI : 0, r: H.r,
         hp: H.hp, maxHp: H.hp, shield: 0, shieldT: 0, alive: true,
         cd: { basic: 0, q: 0, e: 0, r: 0, dash: 0 },

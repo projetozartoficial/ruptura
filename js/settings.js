@@ -21,7 +21,7 @@ const DEFAULT_BINDS = {
 };
 const DEFAULT_SETTINGS = {
   quality: 'auto', fps: false, sound: true, volume: 70, shake: true, dmgNumbers: true, names: true,
-  lookahead: true, smooth: true, net: 'online', binds: JSON.parse(JSON.stringify(DEFAULT_BINDS)),
+  lookahead: true, smooth: true, net: 'online', hideName: false, genericNames: false, streamer: false, binds: JSON.parse(JSON.stringify(DEFAULT_BINDS)),
 };
 const Settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 try {
@@ -59,3 +59,13 @@ function setBind(action, slot, code) {
   Settings.binds[action][slot] = code;
   saveSettings();
 }
+
+// ---------- privacidade (igual ao Valorant) ----------
+// "grupo" = seu time na partida. Quem está fora dele aparece com o nome do caçador.
+function displayName(p, me) {
+  if (!p) return '';
+  if (!me || p.id === me.id) return p.name;
+  if (p.team !== me.team && (Settings.genericNames || p.hide)) return HUNTERS[p.hunter] ? HUNTERS[p.hunter].nome : 'Caçador';
+  return p.name;
+}
+function codeText(code) { return Settings.streamer && code ? '•••••' : code; }

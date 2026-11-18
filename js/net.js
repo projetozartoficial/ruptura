@@ -239,7 +239,7 @@ class ClientState {
     slots.forEach((s, i) => {
       if (!s || s.kind === 'empty') return;
       const H = HUNTERS[s.hunter];
-      this.players.push({ id: s.id, name: s.name, team: i < 4 ? 0 : 1, hunter: s.hunter, bot: s.kind === 'bot', maxHp: H.hp, r: H.r,
+      this.players.push({ id: s.id, name: s.name, hide: !!s.hide, team: i < 4 ? 0 : 1, hunter: s.hunter, bot: s.kind === 'bot', maxHp: H.hp, r: H.r,
         x: 0, y: 0, tx: 0, ty: 0, aim: 0, hp: H.hp, shield: 0, alive: true, z: 0, stun: 0, cd: { q: 0, e: 0, r: 0, dash: 0, basic: 0 },
         kills: 0, deaths: 0, dmg: 0, heal: 0, revive: 0, soulX: 0, soulY: 0, vx: 0, vy: 0, slowT: 0, huntT: 0, bastionT: 0, spdT: 0, invuln: 0, leap: null, init: false });
     });

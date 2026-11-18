@@ -330,3 +330,7 @@ input[type=range]{width:200px;accent-color:var(--gold);padding:0;border:0;backgr
 #pause .pause-box{z-index:1}
 .row.join #in-code{flex:1 1 0;min-width:0;width:auto}
 .row.join .btn{flex:none}
+
+/* cursor visível em menus por cima da partida */
+#scr-game.showcur, #scr-game .pause, #scr-game #swap, #scr-game .tabboard{cursor:default}
+#scr-game .pause .btn, #scr-game #swap .sw{cursor:pointer}

@@ -43,7 +43,7 @@ function trackPerf(raw) {
   perf.fps += (1 / Math.max(raw, 0.001) - perf.fps) * 0.05;
   if (perf.acc < 2) return;
   const avg = perf.acc / perf.n; perf.acc = 0; perf.n = 0;
-  if (Settings.quality === 'auto' && App.inGame && avg > 0.022) {
+  if (Settings.quality === 'auto' && App.inGame && !App.paused && avg > 0.02) {
     if (curQ === 'alta') applyQuality('media'); else if (curQ === 'media') applyQuality('baixa');
     else if (R.dpr > 0.5) { R.dpr = Math.max(0.5, R.dpr - 0.1); resize(); }
   }
@@ -87,6 +87,7 @@ document.addEventListener('click', e => {
     addfriend: () => addFriend(), fraccept: () => Account.respond(b.dataset.id, true), frdecline: () => Account.respond(b.dataset.id, false),
     frremove: () => { const f = Account.friends.find(x => x.req === b.dataset.id); if (f) Account.removeFriend(f); },
     frjoin: () => joinFriendRoom(b.dataset.code), frinvite: () => inviteFriend(b.dataset.uid, b),
+    copycode: () => { try { navigator.clipboard.writeText(App.code); b.textContent = 'Copiado ✓'; setTimeout(() => (b.textContent = 'Copiar código'), 1500); } catch (e) { } },
     invjoin: () => acceptInvite(b.dataset.id), invclose: () => { const i = Account.invites.find(x => x.id === b.dataset.id); if (i) Account.dropInvite(i); },
   })[b.dataset.act]?.();
 });
@@ -121,7 +122,7 @@ function readName() {
   App.name = Account.profile ? Account.profile.name : 'Caçador';
   App.net = Settings.net || 'online';
 }
-function mySlotInfo() { const s = Account.summary(); return { uid: s.uid, tag: s.tag, lvl: s.level, rank: s.rank, mmr: s.mmr, pl: s.placements }; }
+function mySlotInfo() { const s = Account.summary(); return { uid: s.uid, tag: s.tag, hide: !!Settings.hideName, lvl: s.level, rank: s.rank, mmr: s.mmr, pl: s.placements }; }
 
 // ------------------------------------------------------------------
 //  Lobby (o dono da sala é a autoridade)
@@ -187,7 +188,8 @@ async function startJoin(codeArg, hint) {
 }
 function openLobby() {
   App.inGame = false; App.ended = false;
-  $('#lob-code').textContent = App.role === 'solo' ? 'TREINO' : App.code;
+  $('#lob-code').textContent = App.role === 'solo' ? 'TREINO' : codeText(App.code);
+  $('#btn-copy').style.display = App.role === 'host' || App.role === 'client' ? '' : 'none';
   $('#lob-mode').textContent = App.role === 'solo' ? 'Você + bots · primeiro a 5 rounds'
     : App.kind === 'ranked' ? 'Grupo da Ranqueada · passe o código para até 3 amigos'
       : App.net === 'local' ? 'Modo local: abra outra aba e entre com este código' : 'Partida padrão · passe este código para seus amigos';
@@ -216,7 +218,7 @@ function hostOnMsg(pid, m) {
     if (App.kind === 'ranked' && App.search && App.search.active) { App.tr.send(pid, { t: 'full', why: 'Esse grupo está na fila. Peça para cancelarem a busca.' }); return; }
     if (!m.uid) { App.tr.send(pid, { t: 'full', why: 'Só jogadores com conta conectada podem entrar.' }); return; }
     const id = App.nextPid++;
-    const info = { id, name: String(m.name || 'Caçador').slice(0, 14), tag: String(m.tag || '').slice(0, 5), pref: m.pref, uid: m.uid || null, lvl: m.lvl || 1, rank: m.rank ?? -1, mmr: m.mmr || 1000, pl: m.pl || 0 };
+    const info = { id, name: String(m.name || 'Caçador').slice(0, 14), tag: String(m.tag || '').slice(0, 5), hide: !!m.hide, pref: m.pref, uid: m.uid || null, lvl: m.lvl || 1, rank: m.rank ?? -1, mmr: m.mmr || 1000, pl: m.pl || 0 };
     if (!placeHuman(info, App.kind === 'ranked' ? (m.team === 1 ? 1 : 0) : undefined)) { App.tr.send(pid, { t: 'full', why: 'Sala cheia.' }); return; }
     App.peers.set(pid, { id, name: info.name });
     App.tr.send(pid, { t: 'welcome', id, kind: App.kind });
@@ -261,7 +263,9 @@ function renderLobby() {
         d.appendChild(portrait(s.hunter, 88));
         const H = HUNTERS[s.hunter], C = CLASSES[H.classe];
         const info = document.createElement('div'); info.style.flex = '1';
-        info.innerHTML = `<div class="nm">${esc(s.name)}${s.tag ? ` <span class="tg">#${esc(s.tag)}</span>` : ''}${s.id === App.myId ? ' (você)' : ''}</div><div class="hn" style="color:${C.cor}">${H.nome} · ${C.nome}${s.lvl ? ` <span style="color:var(--dim)">· Nv ${s.lvl}</span>` : ''}</div>`;
+        const myIdx = slotOf(App.myId), meT = myIdx >= 0 ? { id: App.myId, team: myIdx < 4 ? 0 : 1 } : null;
+        const sp = { id: s.id, name: s.name, hide: s.hide, hunter: s.hunter, team: i < 4 ? 0 : 1 }, nm = displayName(sp, meT), generic = nm !== s.name;
+        info.innerHTML = `<div class="nm">${esc(nm)}${s.tag && !generic ? ` <span class="tg">#${esc(s.tag)}</span>` : ''}${s.id === App.myId ? ' (você)' : ''}</div><div class="hn" style="color:${C.cor}">${H.nome} · ${C.nome}${s.lvl ? ` <span style="color:var(--dim)">· Nv ${s.lvl}</span>` : ''}</div>`;
         d.appendChild(info);
         if (s.kind === 'human' && (App.kind === 'ranked' || s.rank >= 0)) { const rc = rankCanvas(s.rank ?? -1, 68); rc.className = 'rk'; rc.title = rankName(s.rank ?? -1); d.appendChild(rc); }
       }
@@ -567,7 +571,7 @@ function handleEvents(evs, S) {
     }
   }
 }
-function nameTag(p, me) { const c = p.id === me.id ? 'self' : p.team === me.team ? 'ally' : 'enemy'; return `<span class="${c}">${esc(p.name)}</span>`; }
+function nameTag(p, me) { const c = p.id === me.id ? 'self' : p.team === me.team ? 'ally' : 'enemy'; return `<span class="${c}">${esc(displayName(p, me))}</span>`; }
 function feed(html) {
   const f = $('#feed'), d = document.createElement('div'); d.innerHTML = html; f.prepend(d);
   while (f.children.length > 6) f.lastChild.remove();
@@ -600,10 +604,10 @@ function recordMatch(S, won) {
 let HUD = null;
 function buildHud() {
   const S = state(), me = meP(S);
-  $('#hud-code').textContent = (MODE_NAME[App.matchMode] || '') + (App.role === 'host' || App.role === 'client' ? ` · Sala ${App.code}` : '');
+  $('#hud-code').textContent = (MODE_NAME[App.matchMode] || '') + (App.role === 'host' || App.role === 'client' ? ` · Sala ${codeText(App.code)}` : '');
   for (const t of [0, 1]) {
     const box = $('#ros' + t); box.innerHTML = '';
-    for (const p of S.players.filter(q => q.team === t)) { const d = document.createElement('div'); d.dataset.id = p.id; d.title = p.name; d.appendChild(portrait(p.hunter, 60)); box.appendChild(d); }
+    for (const p of S.players.filter(q => q.team === t)) { const d = document.createElement('div'); d.dataset.id = p.id; d.title = displayName(p, me); d.appendChild(portrait(p.hunter, 60)); box.appendChild(d); }
   }
   $('#feed').innerHTML = '';
   HUD = { ab: [], last: {}, ros: [...$$('.ros div')], hp: $('#me-hp'), sh: $('#me-sh'), hpt: $('#me-hptxt'), spec: $('#spectate'), sc0: $('#sc0'), sc1: $('#sc1'), rd: $('#hud-round'), tm: $('#hud-timer'), fps: $('#fps') };
@@ -656,6 +660,8 @@ function setText(el, key, v) { if (HUD.last[key] !== v) { HUD.last[key] = v; el.
 let hudT = 0;
 function updateHud(S, me, dt) {
   if (App.hudDirty) { App.hudDirty = false; buildHud(); }
+  const showCur = App.paused || !me || !me.alive || $('#swap').classList.contains('show') || App.screen !== 'game';
+  if (App._cur !== showCur) { App._cur = showCur; $('#scr-game').classList.toggle('showcur', showCur); }
   if (!HUD) return;
   updateSwap(S, me);
   if (me) {
@@ -695,7 +701,7 @@ function buildTab() {
   const me = meP(S);
   let h = '<table><tr><th>Time</th><th>Jogador</th><th>Caçador</th><th>Abates</th><th>Mortes</th><th>Dano</th><th>Cura</th></tr>';
   for (const p of S.players.slice().sort((a, b) => a.team - b.team || b.kills - a.kills))
-    h += `<tr style="${me && p.id === me.id ? 'color:var(--gold)' : ''}"><td style="color:${TEAMS[p.team].main}">${TEAMS[p.team].name}</td><td>${esc(p.name)}</td><td>${HUNTERS[p.hunter].nome}</td><td>${p.kills}</td><td>${p.deaths}</td><td>${Math.round(p.dmg)}</td><td>${Math.round(p.heal)}</td></tr>`;
+    h += `<tr style="${me && p.id === me.id ? 'color:var(--gold)' : ''}"><td style="color:${TEAMS[p.team].main}">${TEAMS[p.team].name}</td><td>${esc(displayName(p, me))}</td><td>${HUNTERS[p.hunter].nome}</td><td>${p.kills}</td><td>${p.deaths}</td><td>${Math.round(p.dmg)}</td><td>${Math.round(p.heal)}</td></tr>`;
   $('#tabboard').innerHTML = h + '</table>';
 }
 async function showEnd(S, won) {
@@ -705,7 +711,7 @@ async function showEnd(S, won) {
   const me = meP(S);
   let h = '<tr><th>TIME</th><th>JOGADOR</th><th>CAÇADOR</th><th>ABATES</th><th>MORTES</th><th>DANO</th><th>CURA</th></tr>';
   for (const p of S.players.slice().sort((a, b) => a.team - b.team || b.dmg - a.dmg))
-    h += `<tr class="${me && p.id === me.id ? 'mine' : ''}"><td class="tm${p.team}">${TEAMS[p.team].name}</td><td>${esc(p.name)}</td><td>${HUNTERS[p.hunter].nome}</td><td>${p.kills}</td><td>${p.deaths}</td><td>${Math.round(p.dmg)}</td><td>${Math.round(p.heal)}</td></tr>`;
+    h += `<tr class="${me && p.id === me.id ? 'mine' : ''}"><td class="tm${p.team}">${TEAMS[p.team].name}</td><td>${esc(displayName(p, me))}</td><td>${HUNTERS[p.hunter].nome}</td><td>${p.kills}</td><td>${p.deaths}</td><td>${Math.round(p.dmg)}</td><td>${Math.round(p.heal)}</td></tr>`;
   $('#end-table').innerHTML = h;
   $('#btn-again').textContent = App.matchMode === 'ranked' ? 'Nova ranqueada' : App.role === 'client' ? 'Voltar ao lobby' : 'Jogar de novo';
   $('#end-rewards').innerHTML = '<div class="hint">Salvando progresso...</div>';
@@ -786,6 +792,11 @@ function renderSettings() {
       h += `<tr><td>${a.nome}${a.dica ? `<small>${a.dica}</small>` : ''}</td>${cell(0)}${cell(1)}</tr>`;
     }
     h += `<tr><td>Pausa<small>fixo</small></td><td colspan="2" class="hint">Esc</td></tr></table><div class="set-foot"><span></span><button class="btn ghost" data-reset="binds">Restaurar padrão</button></div>`;
+  } else if (setTab === 'privacy') {
+    h += `<p class="hint" style="margin-bottom:4px">"Grupo" é o seu time na partida. Igual ao Valorant.</p>`;
+    h += toggleRow('hideName', 'Ocultar meu nome para quem não é do meu grupo', 'Os adversários veem o nome do seu caçador em vez do seu ID');
+    h += toggleRow('genericNames', 'Usar nomes genéricos para quem não é do meu grupo', 'Você vê os adversários pelo nome do caçador (bom pra live)');
+    h += toggleRow('streamer', 'Modo streamer: esconder código da sala', 'O código aparece como ••••• (use o botão Copiar código para passar aos amigos)');
   } else if (setTab === 'game') {
     h += toggleRow('lookahead', 'Câmera acompanha a mira', 'A câmera puxa um pouco na direção do mouse');
     h += `<div class="set-row"><span class="lbl2">Conexão das salas<small>Local serve só para testar com várias abas no mesmo PC</small></span><div class="seg">${['online', 'local'].map(n => `<button data-net="${n}" class="${Settings.net === n ? 'on' : ''}">${n === 'online' ? 'Online' : 'Local (teste)'}</button>`).join('')}</div></div>`;
@@ -798,6 +809,9 @@ function renderSettings() {
     const k = c.dataset.set; Settings[k] = c.checked; saveSettings();
     if (k === 'sound' && SFX.on !== c.checked) SFX.toggle();
     applyGameplaySettings();
+    if (k === 'streamer') { if (App.screen === 'lobby') openLobby(); $('#in-code').type = Settings.streamer ? 'password' : 'text'; renderFriends(); renderToasts(); }
+    if (k === 'genericNames' || k === 'hideName') { if (App.screen === 'lobby') renderLobby(); App.hudDirty = true; }
+    if (k === 'hideName' && App.role !== 'none' && !App.inGame) { const me = App.slots[slotOf(App.myId)]; if (me && App.role === 'host') { me.hide = Settings.hideName; broadcastLobby(); renderLobby(); } }
   };
   for (const r of B.querySelectorAll('[data-range]')) r.oninput = () => { Settings.volume = +r.value; $('#vol-v').textContent = r.value + '%'; SFX.setVolume(Settings.volume / 100); saveSettings(); };
   for (const k of B.querySelectorAll('[data-bind]')) k.onclick = e => { if (binding) return; binding = { action: k.dataset.bind, slot: +k.dataset.slot }; renderSettings(); };
@@ -874,6 +888,7 @@ function renderFriends() {
   for (const { f, s } of fr) {
     let btns = '';
     if (s.room && s.room !== App.code) btns += `<button class="btn gold" data-act="frjoin" data-code="${esc(s.room)}">Entrar</button>`;
+    if (s.room) s.txt = s.txt.replace(s.room, codeText(s.room));
     if (canInvite && s.cls && s.cls !== 'game') btns += `<button class="btn" data-act="frinvite" data-uid="${f.uid}">Convidar</button>`;
     btns += `<button class="btn ghost" data-act="frremove" data-id="${f.req}" title="Remover amigo">✕</button>`;
     h += `<div class="fr"><span class="dot ${s.cls}"></span><div class="fi"><div class="fn">${esc(f.name)} <small>#${esc(f.tag)}</small></div><div class="fs">${s.txt}</div></div>${btns}</div>`;
@@ -907,7 +922,7 @@ function renderToasts() {
   for (const i of Account.invites) {
     if (!seenInv.has(i.id + i.t)) { seenInv.add(i.id + i.t); SFX.play('round', 0); }
     const d = document.createElement('div'); d.className = 'toast';
-    d.innerHTML = `<span>${esc(i.fromName)}<small style="color:var(--dim)">#${esc(i.fromTag)}</small> te convidou pra sala <b style="color:var(--gold)">${esc(i.code)}</b></span><button class="btn gold" data-act="invjoin" data-id="${i.id}">Entrar</button><button class="btn ghost" data-act="invclose" data-id="${i.id}">✕</button>`;
+    d.innerHTML = `<span>${esc(i.fromName)}<small style="color:var(--dim)">#${esc(i.fromTag)}</small> te convidou pra sala <b style="color:var(--gold)">${esc(codeText(i.code))}</b></span><button class="btn gold" data-act="invjoin" data-id="${i.id}">Entrar</button><button class="btn ghost" data-act="invclose" data-id="${i.id}">✕</button>`;
     box.appendChild(d);
   }
 }
@@ -1036,3 +1051,5 @@ function gameFrame(dt) {
 show('menu');
 newDemo();
 requestAnimationFrame(loop);
+
+$('#in-code').type = Settings.streamer ? 'password' : 'text';
