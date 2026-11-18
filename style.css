@@ -251,3 +251,7 @@ kbd{display:inline-block;background:#262b4d;border:1px solid #4a518a;border-bott
 .toast{background:var(--panel);border:1px solid var(--gold);border-radius:10px;padding:10px 12px;display:flex;gap:10px;align-items:center;font-weight:600;animation:fin .25s}
 .toast .btn{padding:6px 10px;font-size:13px}
 .slot .tg{color:var(--dim);font-size:13px;font-weight:600}
+
+.logo-emblem{display:block;width:clamp(90px,12vh,140px);margin:0 auto -6px;filter:drop-shadow(0 0 18px rgba(127,245,255,.35));animation:emb 5s ease-in-out infinite}
+@keyframes emb{50%{transform:translateY(-6px)}}
+.logo h1{margin-top:-4px}

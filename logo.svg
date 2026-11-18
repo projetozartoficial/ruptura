@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- RUPTURA — emblema: o "R" partido pela Ruptura, com uma ilha flutuante na base -->
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff7e0"/>
+      <stop offset="0.45" stop-color="#ffcf6a"/>
+      <stop offset="1" stop-color="#c3501e"/>
+    </linearGradient>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffe9a8"/>
+      <stop offset="0.5" stop-color="#d98a2b"/>
+      <stop offset="1" stop-color="#6a2a0c"/>
+    </linearGradient>
+    <radialGradient id="sky" cx="0.5" cy="0.4" r="0.65">
+      <stop offset="0" stop-color="#2c2c66"/>
+      <stop offset="0.6" stop-color="#15132f"/>
+      <stop offset="1" stop-color="#08070f"/>
+    </radialGradient>
+    <linearGradient id="ether" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.5" stop-color="#7ff5ff"/>
+      <stop offset="1" stop-color="#2a9fd0"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="18"/></filter>
+
+    <clipPath id="ladoA"><polygon points="0,0 322,0 322,40 300,150 334,196 262,290 290,338 200,452 200,512 0,512"/></clipPath>
+    <clipPath id="ladoB"><polygon points="322,0 512,0 512,512 200,512 200,452 290,338 262,290 334,196 300,150 322,40"/></clipPath>
+
+    <g id="brasao">
+      <!-- moldura (brasão de caçador) -->
+      <polygon points="256,22 448,104 448,304 256,496 64,304 64,104" fill="url(#frame)"/>
+      <polygon points="256,44 428,118 428,296 256,470 84,296 84,118" fill="url(#sky)"/>
+      <polygon points="256,44 428,118 428,296 256,470 84,296 84,118" fill="none" stroke="#ffcf6a" stroke-opacity="0.5" stroke-width="3"/>
+      <!-- estrelas -->
+      <g fill="#ffffff">
+        <circle cx="136" cy="170" r="2.4" opacity="0.85"/><circle cx="388" cy="150" r="2" opacity="0.7"/>
+        <circle cx="190" cy="104" r="1.6" opacity="0.6"/><circle cx="392" cy="252" r="2.2" opacity="0.6"/>
+        <circle cx="122" cy="262" r="1.6" opacity="0.5"/><circle cx="256" cy="78" r="2.2" opacity="0.85"/>
+        <circle cx="352" cy="96" r="1.4" opacity="0.6"/>
+      </g>
+      <!-- ilha flutuante -->
+      <path d="M176 392 Q256 374 336 392 L318 404 L292 436 L278 420 L256 452 L236 422 L220 436 L194 404 Z" fill="#241c38"/>
+      <path d="M176 392 Q256 374 336 392 Q256 386 176 392 Z" fill="#5b8f55"/>
+      <!-- o R geométrico -->
+      <g transform="translate(256,246) scale(0.8) translate(-277,-259)">
+        <path d="M170 132 H286 C346 132 382 166 382 216 C382 258 356 288 316 297 L384 386 H330 L268 302 H220 V386 H170 Z M220 176 V260 H282 C312 260 330 242 330 218 C330 194 312 176 282 176 Z"
+              fill-rule="evenodd" fill="url(#gold)" stroke="#5a2408" stroke-width="6" stroke-linejoin="round"/>
+      </g>
+    </g>
+  </defs>
+
+  <circle cx="256" cy="250" r="180" fill="#7ff5ff" opacity="0.12" filter="url(#soft)"/>
+
+  <g clip-path="url(#ladoA)" transform="translate(-7,4)"><use href="#brasao"/></g>
+  <g clip-path="url(#ladoB)" transform="translate(7,-4)"><use href="#brasao"/></g>
+
+  <!-- a Ruptura -->
+  <polyline points="322,40 300,150 334,196 262,290 290,338 200,452" fill="none" stroke="url(#ether)" stroke-width="10" stroke-linecap="round" filter="url(#glow)"/>
+  <polyline points="322,40 300,150 334,196 262,290 290,338 200,452" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+
+  <g fill="url(#ether)" filter="url(#glow)">
+    <polygon points="346,58 360,42 364,64"/>
+    <polygon points="186,470 198,462 194,480"/>
+    <polygon points="318,250 328,240 330,256"/>
+  </g>
+</svg>
