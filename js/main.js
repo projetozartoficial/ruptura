@@ -76,6 +76,17 @@ document.addEventListener('click', e => {
     return;
   }
   if (['solo', 'host', 'ranked', 'join', 'friends'].includes(b.dataset.act) && Account.needsNick) { openNick(true); return; }
+  try { runAct(b); } catch (err) { showErr(err); }
+});
+// mostra qualquer erro na tela (ajuda a descobrir bugs no site publicado)
+function showErr(err) {
+  console.error(err);
+  let el = $('#errbox');
+  if (!el) { el = document.createElement('div'); el.id = 'errbox'; el.className = 'errbox'; el.onclick = () => el.remove(); document.body.appendChild(el); }
+  el.innerHTML = `<b>Ops, deu um erro:</b> ${esc(err && err.message || err)}<small>${esc((err && err.stack || '').split('\n').slice(0, 3).join(' | '))}</small><em>Tire um print e mande. Clique para fechar.</em>`;
+}
+addEventListener('error', e => showErr(e.error || e.message));
+function runAct(b) {
   ({
     solo: () => startSolo(), host: () => startHost('standard'), ranked: () => startRankedParty(), join: () => startJoin(),
     codex: () => { buildCodex(); show('codex'); }, howto: () => show('howto'), back: () => show('menu'),
@@ -92,7 +103,7 @@ document.addEventListener('click', e => {
     copycode: () => { try { navigator.clipboard.writeText(App.code); b.textContent = 'Copiado ✓'; setTimeout(() => (b.textContent = 'Copiar código'), 1500); } catch (e) { } },
     invjoin: () => acceptInvite(b.dataset.id), invclose: () => { const i = Account.invites.find(x => x.id === b.dataset.id); if (i) Account.dropInvite(i); },
   })[b.dataset.act]?.();
-});
+}
 
 // ------------------------------------------------------------------
 //  Conta
