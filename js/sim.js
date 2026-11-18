@@ -488,6 +488,11 @@ class Sim {
       vx: Math.cos(a) * o.speed, vy: Math.sin(a) * o.speed, r: 6, dmg: 0, range: 600, trav: 0, hit: new Set(), ang: a,
     }, o);
     pr.ang = a;
+    // colado na parede: o tiro nasce do outro lado? então ele bate na parede na hora
+    if (!pr.passWalls) {
+      const d0 = castRay(this.solids, p.x, p.y, Math.cos(a), Math.sin(a), off + 2);
+      if (d0 < off + 2) { this.ev({ k: 'spark', x: p.x + Math.cos(a) * d0, y: p.y + Math.sin(a) * d0, c: pr.kind }); return pr; }
+    }
     this.projectiles.push(pr);
     return pr;
   }
@@ -495,35 +500,38 @@ class Sim {
     const keep = [];
     for (const pr of this.projectiles) {
       const sp = Math.hypot(pr.vx, pr.vy);
-      pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.trav += sp * dt;
-      let dead = false;
       const owner = this.byId(pr.owner);
-      // colisão com cenário
-      if (!pr.passWalls) {
-        for (const o of this.solids) if (!o.low && pointInSolid(o, pr.x, pr.y, -1)) { dead = true; break; }
-        if (dead) { this.projEnd(pr, owner, true); continue; }
-      }
-      // colisão com jogadores
-      for (const t of this.players) {
-        if (!t.alive || t.invuln > 0 || pr.hit.has(t.id) || t.id === pr.owner) continue;
-        const ally = t.team === pr.team;
-        if (ally && !pr.healAlly) continue;
-        let hitIt;
-        if (pr.kind === 'wave') {
-          const ux = pr.vx / sp, uy = pr.vy / sp, dx = t.x - pr.x, dy = t.y - pr.y;
-          hitIt = Math.abs(dx * ux + dy * uy) < 40 + t.r && Math.abs(-dx * uy + dy * ux) < 160;
-        } else hitIt = dist(pr.x, pr.y, t.x, t.y) < pr.r + t.r;
-        if (!hitIt) continue;
-        pr.hit.add(t.id);
-        if (ally) { this.heal(t, pr.healAlly, owner); this.ev({ k: 'spark', x: t.x, y: t.y, c: 'light' }); continue; }
-        // bastião bloqueia tiros vindos da frente
-        if (t.bastionT > 0 && pr.kind !== 'wave' && Math.abs(angDiff(t.aim, Math.atan2(-pr.vy, -pr.vx))) < 1.1) {
-          this.ev({ k: 'block', x: pr.x, y: pr.y }); dead = true; break;
+      // anda em passos curtos (no máx. 8px) para tiro rápido não "pular" parede fina nem jogador
+      const steps = Math.max(1, Math.ceil(sp * dt / 8)), sdt = dt / steps;
+      let dead = false, wall = false;
+      for (let st = 0; st < steps && !dead; st++) {
+        pr.x += pr.vx * sdt; pr.y += pr.vy * sdt; pr.trav += sp * sdt;
+        if (!pr.passWalls) {
+          for (const o of this.solids) if (!o.low && pointInSolid(o, pr.x, pr.y, 0)) { dead = true; wall = true; break; }
+          if (dead) break;
         }
-        this.projHit(pr, owner, t);
-        if (!pr.pierce) { dead = true; break; }
+        for (const t of this.players) {
+          if (!t.alive || t.invuln > 0 || pr.hit.has(t.id) || t.id === pr.owner) continue;
+          const ally = t.team === pr.team;
+          if (ally && !pr.healAlly) continue;
+          let hitIt;
+          if (pr.kind === 'wave') {
+            const ux = pr.vx / sp, uy = pr.vy / sp, dx = t.x - pr.x, dy = t.y - pr.y;
+            hitIt = Math.abs(dx * ux + dy * uy) < 40 + t.r && Math.abs(-dx * uy + dy * ux) < 160;
+          } else hitIt = dist(pr.x, pr.y, t.x, t.y) < pr.r + t.r;
+          if (!hitIt) continue;
+          pr.hit.add(t.id);
+          if (ally) { this.heal(t, pr.healAlly, owner); this.ev({ k: 'spark', x: t.x, y: t.y, c: 'light' }); continue; }
+          // bastião bloqueia tiros vindos da frente
+          if (t.bastionT > 0 && pr.kind !== 'wave' && Math.abs(angDiff(t.aim, Math.atan2(-pr.vy, -pr.vx))) < 1.1) {
+            this.ev({ k: 'block', x: pr.x, y: pr.y }); dead = true; break;
+          }
+          this.projHit(pr, owner, t);
+          if (!pr.pierce) { dead = true; break; }
+        }
+        if (!dead && pr.trav >= pr.range) break;
       }
-      if (dead) { this.projEnd(pr, owner, false); continue; }
+      if (dead) { this.projEnd(pr, owner, wall); continue; }
       if (pr.trav >= pr.range) { this.projEnd(pr, owner, false, true); continue; }
       keep.push(pr);
     }
@@ -709,14 +717,7 @@ const HUNTER_LOGIC = {
     },
   },
   rocha: {
-    basic(sim, p) {
-      for (const t of sim.players) {
-        if (!t.alive || t.team === p.team) continue;
-        const d = dist(p.x, p.y, t.x, t.y);
-        if (d < 140 + t.r && Math.abs(angDiff(p.aim, Math.atan2(t.y - p.y, t.x - p.x))) < 1.05) sim.damage(t, 48, p);
-      }
-      sim.ev({ k: 'swing', id: p.id, a: p.aim });
-    },
+    basic(sim, p) { meleeArc(sim, p, 140, 48, 1.05); sim.ev({ k: 'swing', id: p.id, a: p.aim }); },
     q(sim, p) { sim.shoot(p, { kind: 'fissure', speed: 950, range: 620, r: 26, dmg: 50, pierce: true }); },
     e(sim, p) { p.bastionT = 3; },
     r(sim, p) {
@@ -839,7 +840,7 @@ function meleeArc(sim, p, range, dmg, half) {
   for (const t of sim.players) {
     if (!t.alive || t.team === p.team) continue;
     const d = dist(p.x, p.y, t.x, t.y);
-    if (d < range + t.r && Math.abs(angDiff(p.aim, Math.atan2(t.y - p.y, t.x - p.x))) < half) sim.damage(t, dmg, p);
+    if (d < range + t.r && Math.abs(angDiff(p.aim, Math.atan2(t.y - p.y, t.x - p.x))) < half && castRay(sim.solids, p.x, p.y, (t.x - p.x) / (d || 1), (t.y - p.y) / (d || 1), d) >= d - t.r) sim.damage(t, dmg, p);
   }
 }
 Object.assign(HUNTER_LOGIC, {

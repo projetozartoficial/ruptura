@@ -306,7 +306,10 @@ class ClientState {
     for (const pr of this.projectiles) {
       pr.hidden = age < -0.02 && pr.trav0 < 40;
       const t = Math.max(0, Math.min(age, 0.12));
-      pr.x = pr.sx + pr.vx * t; pr.y = pr.sy + pr.vy * t; pr.trav = pr.trav0 + Math.hypot(pr.vx, pr.vy) * t;
+      const sp = Math.hypot(pr.vx, pr.vy) || 1;
+      let d = sp * t;
+      if (pr.kind !== 'wave' && d > 0) { const w = castRay(MAP_OBS.concat(this.walls), pr.sx, pr.sy, pr.vx / sp, pr.vy / sp, d); if (w < d) { d = w; pr.hidden = true; } }
+      pr.x = pr.sx + pr.vx / sp * d; pr.y = pr.sy + pr.vy / sp * d; pr.trav = pr.trav0 + d;
     }
     for (const z of this.zones) z.t -= dt;
     for (const w of this.walls) w.life -= dt;
