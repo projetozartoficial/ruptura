@@ -189,7 +189,7 @@ async function startJoin(codeArg, hint) {
 function openLobby() {
   App.inGame = false; App.ended = false;
   $('#lob-code').textContent = App.role === 'solo' ? 'TREINO' : App.code;
-  $('#lob-mode').textContent = App.role === 'solo' ? 'Você + bots · primeiro a 7 rounds'
+  $('#lob-mode').textContent = App.role === 'solo' ? 'Você + bots · primeiro a 5 rounds'
     : App.kind === 'ranked' ? 'Grupo da Ranqueada · passe o código para até 3 amigos'
       : App.net === 'local' ? 'Modo local: abra outra aba e entre com este código' : 'Partida padrão · passe este código para seus amigos';
   $('.lob-title').textContent = App.kind === 'ranked' ? 'Ranqueada · Arena 4v4' : 'Escolha seu time e seu caçador';
@@ -227,6 +227,7 @@ function hostOnMsg(pid, m) {
   }
   const pe = App.peers.get(pid); if (!pe) return;
   if (m.t === 'in') { App.remoteIn.set(pe.id, m.i); return; }
+  if (m.t === 'swap') { if (App.sim) App.sim.requestSwap(pe.id, m.hunter); return; }
   if (!App.inGame) lobbyAction(pe.id, m);
 }
 function lobbyAction(id, m) {
@@ -307,7 +308,7 @@ function renderRankedBar() {
     if (host) { if (t >= 45) html += `<button class="btn" data-act="vsbots">Jogar contra bots (RR pela metade)</button>`; html += `<button class="btn ghost" data-act="cancelsearch">Cancelar</button>`; }
   } else {
     const pb = partyProblem();
-    html = `<div class="st">${host ? 'Monte seu grupo (até 4) e busque uma partida' : 'Aguardando o líder do grupo buscar partida'}<small>${pb ? '⚠ ' + esc(pb) : 'Primeiro a 7 rounds · 6×6 vai pra prorrogação (vence quem abrir 2)'}</small></div>`;
+    html = `<div class="st">${host ? 'Monte seu grupo (até 4) e busque uma partida' : 'Aguardando o líder do grupo buscar partida'}<small>${pb ? '⚠ ' + esc(pb) : 'Primeiro a 5 rounds · 4×4 vai pra prorrogação (vence quem abrir 2)'}</small></div>`;
     if (host) html += `<button class="btn big gold" data-act="search" ${pb ? 'disabled' : ''}>Buscar partida</button>`;
   }
   el.innerHTML = html;
@@ -469,7 +470,7 @@ addEventListener('keyup', e => { const k = e.key.toLowerCase(); keys[k] = false;
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.l = mouse.r = false; });
 $('#scr-game').addEventListener('contextmenu', e => e.preventDefault());
 addEventListener('mousemove', e => { mouse.cx = e.clientX; mouse.cy = e.clientY; });
-$('#scr-game').addEventListener('mousedown', e => { SFX.init(); if (e.button === 0) mouse.l = true; if (e.button === 2) mouse.r = true; });
+$('#scr-game').addEventListener('mousedown', e => { SFX.init(); if (e.target.closest('#swap')) return; if (e.button === 0) mouse.l = true; if (e.button === 2) mouse.r = true; });
 addEventListener('mouseup', e => { if (e.button === 0) mouse.l = false; if (e.button === 2) mouse.r = false; });
 function togglePause(v) { App.paused = v ?? !App.paused; $('#pause').classList.toggle('show', App.paused); }
 function readInput() {
@@ -526,6 +527,13 @@ function handleEvents(evs, S) {
         break;
       }
       case 'fight': flashBanner('LUTEM!', '', 900); SFX.play('tick', 0); break;
+      case 'swap': {
+        const p = pl(e.id); if (!p) break;
+        if (p.team === me.team) feed(`${nameTag(p, me)} trocou para <b style="color:${CLASSES[HUNTERS[e.h].classe].cor}">${HUNTERS[e.h].nome}</b>`);
+        if (e.id === me.id) { App.myHunter = e.h; try { localStorage.setItem('ruptura-hunter', e.h); } catch (x) { } SFX.play('cast', 0); }
+        App.hudDirty = true; App.swapSig = '';
+        break;
+      }
       case 'roundEnd': {
         const won = e.w === me.team;
         flashBanner(e.w < 0 ? 'EMPATE' : won ? 'ROUND VENCIDO' : 'ROUND PERDIDO', `${TEAMS[0].name} ${e.sc[0]} × ${e.sc[1]} ${TEAMS[1].name}`, 3000);
@@ -599,10 +607,40 @@ function buildHud() {
     HUD.ab.push({ key, el: d, cdv: d.querySelector('.cdv'), cdt: d.querySelector('.cdt'), max: key === 'dash' ? DASH_CD : key === 'basic' ? H.habilidades.basico.cd : H.habilidades[key].cd, p: -1, t: null, rdy: null });
   });
 }
+// painel de troca entre rounds
+function requestSwap(h) {
+  if (App.role === 'client') App.tr.send({ t: 'swap', hunter: h });
+  else if (App.sim) App.sim.requestSwap(App.myId, h);
+}
+function updateSwap(S, me) {
+  const el = $('#swap');
+  const open = me && !App.ended && (S.phase === 'roundEnd' || S.phase === 'countdown') && App.screen === 'game';
+  el.classList.toggle('show', !!open);
+  if (!open) { App.swapSig = ''; return; }
+  const left = S.phase === 'roundEnd' ? S.phaseT + 3 : S.phaseT;
+  setText($('#swap-t'), 'swapt', `${Math.max(0, Math.ceil(left))}s · não repete no time`);
+  const used = new Set(S.players.filter(p => p.team === me.team && p.id !== me.id).map(p => p.hunter));
+  const sig = me.hunter + '|' + [...used].sort().join(',');
+  if (sig === App.swapSig) return;
+  App.swapSig = sig;
+  const L = $('#swap-list'); L.innerHTML = '';
+  for (const h of HUNTER_IDS) {
+    const H = HUNTERS[h], C = CLASSES[H.classe];
+    const d = document.createElement('div');
+    d.className = 'sw' + (h === me.hunter ? ' cur' : '') + (used.has(h) ? ' taken' : '');
+    d.title = `${H.nome} — ${C.nome}`;
+    d.appendChild(portrait(h, 116));
+    d.insertAdjacentHTML('beforeend', `<span class="cl" style="color:${C.cor}">${C.icone}</span><span>${H.nome}</span>`);
+    d.onclick = () => { SFX.init(); requestSwap(h); };
+    L.appendChild(d);
+  }
+}
 function setText(el, key, v) { if (HUD.last[key] !== v) { HUD.last[key] = v; el.textContent = v; } }
 let hudT = 0;
 function updateHud(S, me, dt) {
+  if (App.hudDirty) { App.hudDirty = false; buildHud(); }
   if (!HUD) return;
+  updateSwap(S, me);
   if (me) {
     for (const a of HUD.ab) {
       const cd = me.cd[a.key] || 0;

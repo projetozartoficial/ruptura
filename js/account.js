@@ -220,7 +220,7 @@ const Account = {
   pres: { status: 'menu', room: null },
   presence(patch) {
     if (patch) Object.assign(this.pres, patch);
-    if (!this.logged || !this.profile.nickSet) return;
+    if (!this.logged || !this.db || !this.profile.nickSet) return;
     const P = this.profile;
     this.db.collection('presence').doc(this.user.uid).set({ name: P.name, tag: P.tag, rank: P.rank, level: P.level, t: Date.now(), status: this.pres.status, room: this.pres.room || null }).catch(() => { });
   },

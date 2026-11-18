@@ -19,7 +19,7 @@ Só joga quem conectar a conta Google (vale para todos os modos). Sem essa confi
 - 5 partidas de colocação; depois, 100 RR sobe de divisão.
 - RR depende de vitória/derrota, diferença de rounds, desempenho individual (mais nos elos baixos) e do MMR oculto.
 - Grupos de 1 a 4 jogadores, com no máximo um elo de diferença.
-- Primeiro a 7 rounds. No 6×6 da Ranqueada há prorrogação até alguém abrir 2 rounds; na partida padrão o 6×6 vira round decisivo.
+- Primeiro a 5 rounds. No 4×4 da Ranqueada há prorrogação até alguém abrir 2 rounds; na partida padrão o 4×4 vira round decisivo.
 
 ## Arquivos
 - `js/data.js` — universo, caçadores, mapa

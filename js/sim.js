@@ -96,7 +96,7 @@ class Sim {
   }
 
   ev(e) { this.events.push(e); }
-  // Padrão: primeiro a 7 (6x6 vira round decisivo). Ranqueada: 6x6 vai pra prorrogação, vence quem abrir 2.
+  // Padrão: primeiro a 5 (4x4 vira round decisivo). Ranqueada: 4x4 vai pra prorrogação, vence quem abrir 2.
   matchDecided() {
     const [a, b] = this.score, top = Math.max(a, b);
     if (top < WIN_ROUNDS) return false;
@@ -105,6 +105,29 @@ class Sim {
   }
   byId(id) { return this.players.find(p => p.id === id); }
 
+  // ---------- troca de caçador entre rounds ----------
+  canSwap() { return this.phase === 'roundEnd' || this.phase === 'countdown'; }
+  requestSwap(id, hid) {
+    const p = this.byId(id);
+    if (!p || !HUNTERS[hid] || !this.canSwap() || p.hunter === hid) return false;
+    if (this.players.some(q => q.team === p.team && q !== p && q.hunter === hid)) return false;
+    const H = HUNTERS[hid];
+    p.hunter = hid; p.maxHp = H.hp; p.r = H.r; p.hp = H.hp; p.shield = 0;
+    p.cd = { basic: 0, q: 0, e: 0, r: this.phase === 'countdown' ? Math.max(p.cd.r, 18) : 18, dash: 0 };
+    p.brain = null;
+    this.ev({ k: 'swap', id, h: hid });
+    return true;
+  }
+  botSwaps(winner) {
+    for (const p of this.players) {
+      if (!p.bot) continue;
+      const lost = winner >= 0 && p.team !== winner;
+      if (Math.random() > (lost ? 0.3 : 0.1)) continue;
+      const used = new Set(this.players.filter(q => q.team === p.team).map(q => q.hunter));
+      const free = HUNTER_IDS.filter(h => !used.has(h));
+      if (free.length) this.requestSwap(p.id, free[(Math.random() * free.length) | 0]);
+    }
+  }
   startRound() {
     this.round++;
     this.night = this.round % 2 === 0;
@@ -193,8 +216,9 @@ class Sim {
       let w = -1;
       if (alive[0] > 0) w = 0; else if (alive[1] > 0) w = 1;
       if (w >= 0) this.score[w]++;
-      this.phase = 'roundEnd'; this.phaseT = 4.5;
+      this.phase = 'roundEnd'; this.phaseT = SWAP_TIME;
       this.ev({ k: 'roundEnd', w, sc: this.score.slice() });
+      this.botSwaps(w);
     }
   }
 

@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="icon" type="image/svg+xml" href="logo.svg?v=5">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="icon" type="image/svg+xml" href="logo.svg?v=7">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 <canvas id="bg"></canvas>
@@ -17,7 +17,7 @@
 <section id="scr-menu" class="screen active">
   <div class="menu-wrap">
     <div class="logo">
-      <img class="logo-emblem" src="logo.svg?v=5" alt="" width="110" height="110" style="width:110px;height:110px">
+      <img class="logo-emblem" src="logo.svg?v=7" alt="" width="110" height="110" style="width:110px;height:110px">
       <h1>RUPTURA</h1>
       <h2>Caçadores do Abismo</h2>
     </div>
@@ -46,7 +46,7 @@
       <p id="menu-msg" class="msg"></p>
     </div>
   </div>
-  <div class="ver">v0.4 · Arena 4v4 · Arena de Vésper</div>
+  <div class="ver">v0.5 · Arena 4v4 · Arena de Vésper</div>
 </section>
 
 <!-- ============ LOBBY ============ -->
@@ -102,8 +102,9 @@
         <div><kbd>Tab</kbd> Placar · <kbd>Esc</kbd> Menu · <kbd>M</kbd> Som</div>
       </div>
       <ul>
-        <li><b>Arena 4v4:</b> dois esquadrões de 4 caçadores. Vence o round o time que eliminar todos os inimigos. Quem chegar a <b>7 rounds</b> leva a partida. Na partida padrão, 6×6 vira um <b>round decisivo</b>; na Ranqueada, 6×6 vai pra <b>prorrogação</b> e vence quem abrir 2 rounds de vantagem (8×6, 9×7...).</li>
+        <li><b>Arena 4v4:</b> dois esquadrões de 4 caçadores. Vence o round o time que eliminar todos os inimigos. Quem chegar a <b>5 rounds</b> leva a partida. Na partida padrão, 4×4 vira um <b>round decisivo</b>; na Ranqueada, 4×4 vai pra <b>prorrogação</b> e vence quem abrir 2 rounds de vantagem (6×4, 7×5...).</li>
         <li><b>Ranqueada:</b> libera no <b>nível 15</b> de conta. São 5 partidas de colocação e depois você ganha ou perde <b>RR</b> (100 RR sobe de divisão): Bronze, Silver, Gold, Platinum, Diamond, Elite, Master, GrandMaster (I–III) e Champion. Grupos de até 4, com no máximo um elo de diferença entre os membros.</li>
+        <li><b>Troca de caçador:</b> entre um round e outro abre um painel e você pode trocar de caçador (sem repetir no time). Mude a tática conforme a partida!</li>
         <li><b>Visão:</b> você só vê inimigos que estão na linha de visão do seu time. Paredes, árvores e cristais bloqueiam a visão.</li>
         <li><b>Noite:</b> os rounds pares acontecem à noite. Aí a visão vira um <b>cone</b> na direção da sua mira, com um círculo pequeno em volta.</li>
         <li><b>Névoa Rubra:</b> depois de ~30s a névoa começa a fechar o mapa. Ficar fora dela causa dano.</li>
@@ -176,6 +177,7 @@
     </div>
     <canvas id="minimap" width="240" height="160"></canvas>
     <div id="fps" class="fps"></div>
+    <div id="swap" class="swap"><div class="swap-h"><b>Trocar de caçador</b><span id="swap-t"></span></div><div id="swap-list" class="swap-list"></div></div>
     <div id="spectate" class="spectate"></div>
   </div>
   <div id="tabboard" class="tabboard"></div>
@@ -216,14 +218,14 @@
 </aside>
 <div id="toasts" class="toasts"></div>
 
-<script src="js/data.js?v=5"></script>
-<script src="js/sim.js?v=5"></script>
-<script src="js/ai.js?v=5"></script>
-<script src="js/render.js?v=5"></script>
-<script src="js/audio.js?v=5"></script>
-<script src="js/net.js?v=5"></script>
-<script src="js/firebase-config.js?v=5"></script>
-<script src="js/account.js?v=5"></script>
-<script src="js/main.js?v=5"></script>
+<script src="js/data.js?v=7"></script>
+<script src="js/sim.js?v=7"></script>
+<script src="js/ai.js?v=7"></script>
+<script src="js/render.js?v=7"></script>
+<script src="js/audio.js?v=7"></script>
+<script src="js/net.js?v=7"></script>
+<script src="js/firebase-config.js?v=7"></script>
+<script src="js/account.js?v=7"></script>
+<script src="js/main.js?v=7"></script>
 </body>
 </html>

@@ -146,7 +146,7 @@ function encodeSnap(sim, events) {
     P: sim.players.map(p => [p.id, r1(p.x), r1(p.y), r2(p.aim), Math.round(p.hp), Math.round(p.shield), p.alive ? 1 : 0,
       (p.slowT > 0 ? 1 : 0) | (p.huntT > 0 ? 2 : 0) | (p.bastionT > 0 ? 4 : 0) | (p.spdT > 0 ? 8 : 0) | (p.invuln > 0 ? 16 : 0) | (p.leap ? 32 : 0) | (p.dashT > 0 ? 64 : 0) | (p.rootT > 0 ? 128 : 0) | (p.parryT > 0 ? 256 : 0) | (p.wardT > 0 ? 512 : 0) | (p.spinT > 0 ? 1024 : 0),
       Math.round(p.z), r2(p.stun), r1(p.cd.q), r1(p.cd.e), r1(p.cd.r), r1(p.cd.dash), r2(p.cd.basic),
-      p.kills, p.deaths, Math.round(p.dmg), Math.round(p.heal), r2(p.revive), Math.round(p.soulX), Math.round(p.soulY), Math.round(p.vx), Math.round(p.vy)]),
+      p.kills, p.deaths, Math.round(p.dmg), Math.round(p.heal), r2(p.revive), Math.round(p.soulX), Math.round(p.soulY), Math.round(p.vx), Math.round(p.vy), HUNTER_IDS.indexOf(p.hunter)]),
     J: sim.projectiles.map(pr => [pr.id, PKINDS.indexOf(pr.kind), r1(pr.x), r1(pr.y), Math.round(pr.vx), Math.round(pr.vy), pr.team, pr.owner, Math.round(pr.trav)]),
     Z: sim.zones.map(z => [z.id, ZKINDS.indexOf(z.type), Math.round(z.x), Math.round(z.y), z.r, r2(z.t), z.T, z.team]),
     L: sim.walls.map(w => [w.id, r1(w.x), r1(w.y), w.r, r2(w.life), w.T]),
@@ -183,6 +183,7 @@ class ClientState {
       p.z = a[8]; p.stun = a[9];
       p.cd = { q: a[10], e: a[11], r: a[12], dash: a[13], basic: a[14] };
       p.kills = a[15]; p.deaths = a[16]; p.dmg = a[17]; p.heal = a[18]; p.revive = a[19]; p.soulX = a[20]; p.soulY = a[21]; p.vx = a[22]; p.vy = a[23];
+      const hid = HUNTER_IDS[a[24]]; if (hid && hid !== p.hunter) { p.hunter = hid; p.maxHp = HUNTERS[hid].hp; p.r = HUNTERS[hid].r; }
     }
     this.snapT = performance.now();
     this.projectiles = s.J.map(j => ({ id: j[0], kind: PKINDS[j[1]], sx: j[2], sy: j[3], x: j[2], y: j[3], vx: j[4], vy: j[5], team: j[6], owner: j[7], trav0: j[8], trav: j[8] }));
