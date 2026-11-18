@@ -88,9 +88,14 @@ const ROLE = {
   duna: { range: 560, aggro: 0.5 },
   elo: { range: 450, aggro: 0.4 },
   bisao: { range: 110, aggro: 1.0 },
+  vespa: { range: 480, aggro: 0.7 },
+  cometa: { range: 400, aggro: 0.9 },
+  teia: { range: 540, aggro: 0.5 },
+  brisa: { range: 470, aggro: 0.4 },
+  egide: { range: 110, aggro: 1.0 },
 };
-const PROJ_SPEED = { brasa: 960, corvo: 1150, mare: 760, lumi: 980, rocha: 9999, lamina: 950, trovao: 1050, vinha: 850, sino: 850, ancora: 900, serra: 1700, fera: 9999, duna: 820, elo: 900, bisao: 9999 };
-const MELEE = { rocha: 1, ancora: 1, lamina: 1, fera: 1, bisao: 1 };
+const PROJ_SPEED = { brasa: 960, corvo: 1150, mare: 760, lumi: 980, rocha: 9999, lamina: 950, trovao: 1050, vinha: 850, sino: 850, ancora: 900, serra: 1700, fera: 9999, duna: 820, elo: 900, bisao: 9999, vespa: 1250, cometa: 1000, teia: 880, brisa: 960, egide: 9999 };
+const MELEE = { rocha: 1, ancora: 1, lamina: 1, fera: 1, bisao: 1, egide: 1 };
 
 function botThink(sim, p, dt) {
   const inp = p.input;
@@ -274,6 +279,33 @@ function botThink(sim, p, dt) {
       if (d < 450 && d > 120) inp.q = true;
       if (hpF < 0.65 && d < 400) inp.e = true;
       if (d < 240 && (nearE >= 2 || hpF > 0.4)) inp.r = true;
+      break;
+    case 'vespa':
+      if (d < 600) inp.q = true;
+      if (hpF < 0.4 && d < 280) { inp.e = true; inp.ax = p.x - (target.x - p.x); inp.ay = p.y - (target.y - p.y); }
+      if (d < 680 && (nearE >= 2 || target.hp < 260)) { inp.r = true; inp.ax = target.x; inp.ay = target.y; }
+      break;
+    case 'cometa':
+      if (d < 500 && d > 130) { inp.q = true; inp.ax = target.x; inp.ay = target.y; }
+      if (hpF < 0.6 && d < 450) inp.e = true;
+      if (d < 680 && (nearE >= 2 || target.hp < 300)) { inp.r = true; inp.ax = target.x; inp.ay = target.y; }
+      break;
+    case 'teia':
+      if (d < 520 && Math.random() < 0.3) { inp.q = true; inp.ax = target.x + target.vx * 0.5; inp.ay = target.y + target.vy * 0.5; }
+      if (hpF < 0.55 && (p.slowT > 0 || p.rootT > 0 || d < 300)) inp.e = true;
+      if (d < 640 && nearE >= 2) inp.r = true;
+      break;
+    case 'brisa': {
+      const near = allies.filter(a => dist(a.x, a.y, p.x, p.y) < 280);
+      if (near.length >= 1 && d < 600) inp.q = true;
+      if (d < 200) inp.e = true;
+      if (allies.concat([p]).filter(a => a.hp / a.maxHp < 0.6 && dist(a.x, a.y, p.x, p.y) < 300).length >= 2) inp.r = true;
+      break;
+    }
+    case 'egide':
+      if (d < 420 && d > 120) inp.q = true;
+      if (d < 270 && nearE >= 1) inp.e = true;
+      if (d < 400 && (hpF < 0.6 || nearE >= 2)) inp.r = true;
       break;
     case 'ancora':
       if (d < 560 && d > 150) inp.q = true;

@@ -6,7 +6,6 @@
 const WORLD_W = 2400, WORLD_H = 1600;
 const TICK = 1 / 60;
 const WIN_ROUNDS = 5;
-const BAN_TIME = 12, BAN_ROUNDS = 3;
 const SWAP_TIME = 8; // segundos entre rounds para trocar de caçador
 
 const TEAMS = [
@@ -209,6 +208,66 @@ const HUNTERS = {
       q: { nome: 'Investida', cd: 9, desc: 'Avança com tudo e atordoa o primeiro inimigo atingido.' },
       e: { nome: 'Couraça', cd: 12, desc: 'Por 3s: -40% de dano e imune a atordoar, prender e lentificar.' },
       r: { nome: 'Estouro da Manada', cd: 45, desc: 'Três ondas de choque seguidas em volta de você.' },
+    },
+  },
+  vespa: {
+    nome: 'Vespa', titulo: 'A Arqueira do Ninho', classe: 'lutador',
+    hp: 490, speed: 238, r: 20,
+    cores: { pele: '#d8a878', roupa: '#2a2a2a', roupa2: '#e0b020', detalhe: '#b6ff3a', cabelo: '#1a1a1a', arma: '#6a5030' },
+    lore: 'Nina Vespa cresceu nas colmeias gigantes do Bosque Zumbidor, onde as abelhas do Éter têm o tamanho de cães. Ela aprendeu a molhar as flechas no veneno delas. Uma picada não mata ninguém. A terceira, sim.',
+    habilidades: {
+      basico: { nome: 'Ferrão', cd: 0.32, desc: 'Flecha rápida que envenena (dano ao longo do tempo).' },
+      q: { nome: 'Rajada Tripla', cd: 7, desc: 'Dispara três ferrões em leque.' },
+      e: { nome: 'Voo Rasante', cd: 8, desc: 'Avança rápido até a mira.' },
+      r: { nome: 'Enxame', cd: 45, desc: 'Solta um enxame numa área: fere, lentifica e envenena por 4s.' },
+    },
+  },
+  cometa: {
+    nome: 'Cometa', titulo: 'O Viajante Estelar', classe: 'iniciador',
+    hp: 560, speed: 244, r: 21,
+    cores: { pele: '#c8b8e8', roupa: '#1e2a5a', roupa2: '#0e1430', detalhe: '#9fd8ff', cabelo: '#f0f4ff', arma: '#9fd8ff' },
+    lore: 'Ninguém sabe de onde Cometa veio. Ele caiu do céu na noite da Ruptura, dentro de uma pedra em chamas, e acordou sem memória. Só lembra de uma coisa: como cair de novo, e cair com força.',
+    habilidades: {
+      basico: { nome: 'Estilhaço Estelar', cd: 0.4, desc: 'Lança um fragmento de estrela.' },
+      q: { nome: 'Queda de Cometa', cd: 9, desc: 'Salta alto e cai na mira, ferindo e atordoando quem estiver na queda.' },
+      e: { nome: 'Órbita', cd: 11, desc: 'Ganha um escudo e velocidade por alguns segundos.' },
+      r: { nome: 'Chuva de Meteoros', cd: 48, desc: 'Cinco meteoros caem em sequência na área da mira.' },
+    },
+  },
+  teia: {
+    nome: 'Teia', titulo: 'A Tecelã das Sombras', classe: 'controlador',
+    hp: 470, speed: 228, r: 21,
+    cores: { pele: '#b8a8c8', roupa: '#2a1a3a', roupa2: '#140c20', detalhe: '#d070ff', cabelo: '#e8e0f0', arma: '#d070ff' },
+    lore: 'Aracne Teia mora nas cavernas debaixo das ilhas, onde a luz não chega. Ela tece fios tão finos que só aparecem quando já é tarde. Os mineiros dizem que, se você ouvir um fio vibrando, é porque ela já sabe onde você está.',
+    habilidades: {
+      basico: { nome: 'Fio Pegajoso', cd: 0.42, desc: 'Fio que fere e lentifica um pouco.' },
+      q: { nome: 'Armadilha', cd: 7, desc: 'Esconde uma armadilha no chão (invisível para o inimigo). Quem pisar fica preso.' },
+      e: { nome: 'Casulo', cd: 12, desc: 'Ganha um escudo e se livra de lentidão, prisão e veneno.' },
+      r: { nome: 'Grande Teia', cd: 45, desc: 'Cobre uma área enorme com teia: prende quem entra e lentifica muito.' },
+    },
+  },
+  brisa: {
+    nome: 'Brisa', titulo: 'A Guardiã dos Ventos', classe: 'protetor',
+    hp: 490, speed: 240, r: 20,
+    cores: { pele: '#e8c8a8', roupa: '#d8eef0', roupa2: '#7ab8c8', detalhe: '#5ff0d0', cabelo: '#a8e8ff', arma: '#5ff0d0' },
+    lore: 'Céu Brisa cuida dos moinhos que mantêm as ilhas flutuando. Ela conversa com o vento, e o vento obedece. Num campo de batalha, ela empurra os inimigos para longe e leva os aliados nas costas do ar.',
+    habilidades: {
+      basico: { nome: 'Sopro', cd: 0.4, desc: 'Rajada de ar que fere inimigos e cura aliados que atravessa.' },
+      q: { nome: 'Corrente Ascendente', cd: 10, desc: 'Você e os aliados em volta ganham velocidade e um escudo.' },
+      e: { nome: 'Rajada Repulsora', cd: 10, desc: 'Empurra para longe os inimigos perto de você.' },
+      r: { nome: 'Olho do Furacão', cd: 50, desc: 'Cria uma área calma: aliados dentro se curam e recebem menos dano por 5s.' },
+    },
+  },
+  egide: {
+    nome: 'Égide', titulo: 'A Muralha Viva', classe: 'vanguarda',
+    hp: 780, speed: 214, r: 25, big: 1.14,
+    cores: { pele: '#a87858', roupa: '#8a8a9a', roupa2: '#4a4a5a', detalhe: '#ffcf6a', cabelo: '#6a3a2a', arma: '#c0c0cc' },
+    lore: 'Égide foi a capitã da guarda da última cidade que caiu na Ruptura. Ela segurou o portão sozinha até todos fugirem. O escudo dela ainda tem as marcas daquela noite, e ela promete que ninguém passa por ele de novo.',
+    habilidades: {
+      basico: { nome: 'Golpe de Escudo', cd: 0.65, desc: 'Golpe em arco à frente.' },
+      q: { nome: 'Avanço com Escudo', cd: 9, desc: 'Avança e atordoa o primeiro inimigo atingido.' },
+      e: { nome: 'Provocar', cd: 12, desc: 'Inimigos em volta são obrigados a mirar em você por 1,5s. Você recebe menos dano.' },
+      r: { nome: 'Égide Ancestral', cd: 50, desc: 'Você e os aliados próximos ganham escudo e -40% de dano por 4s.' },
     },
   },
 };

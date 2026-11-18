@@ -8,6 +8,7 @@ const ICONS = {
   brasa: ['✹', '✺', '➤', '☄'], corvo: ['➶', '⛓', '✧', '☾'], mare: ['◉', '◌', '▥', '≋'], lumi: ['✦', '⛉', '✚', '☀'], rocha: ['⚒', '⚡', '⛨', '⛰'],
   lamina: ['〉', '➹', '◈', '✵'], trovao: ['ϟ', '⇶', '⌁', '☈'], vinha: ['❦', '⚘', '✿', '♣'], sino: ['〰', '⇄', '◍', '♫'], ancora: ['⚓', '⥅', '⛊', '⛓'],
   serra: ['⌖', '➼', '↶', '⁂'], fera: ['⚟', '⤴', '◎', '♨'], duna: ['∴', '◒', '▤', '꩜'], elo: ['∞', '⚭', '✚', '✶'], bisao: ['⚔', '⇛', '⛨', '⚑'],
+  vespa: ['➹', '⋔', '➚', '✺'], cometa: ['✦', '☄', '◌', '⁂'], teia: ['⌇', '⊛', '◎', '✳'], brisa: ['≈', '⇡', '⇶', '❂'], egide: ['⛉', '⇛', '❢', '⛨'],
 };
 const MODE_NAME = { training: 'Treino', standard: 'Partida padrão', ranked: 'Ranqueada' };
 
@@ -232,6 +233,8 @@ function hostOnMsg(pid, m) {
   if (m.t === 'swap') { if (App.sim) App.sim.requestSwap(pe.id, m.hunter); return; }
   if (m.t === 'ban') { if (App.sim) App.sim.requestBan(pe.id, m.hunter); return; }
   if (m.t === 'veto') { draftVeto(pe.id, m.map); return; }
+  if (m.t === 'hban') { draftHBanReq(pe.id, m.hunter); return; }
+  if (m.t === 'hpick' || m.t === 'ready') { draftPickReq(pe.id, m); return; }
   if (!App.inGame) lobbyAction(pe.id, m);
 }
 function lobbyAction(id, m) {
@@ -390,102 +393,194 @@ function hostStart() {
 // ------------------------------------------------------------------
 //  Veto de mapas: capitães banem alternado (A, B, A, B...) até sobrar 1
 // ------------------------------------------------------------------
-const VETO_TIME = 12;
+const VETO_TIME = 12, HBAN_TIME = 20, HBAN_TOTAL = 4, HPICK_TIME = 25;
+// Ordem da partida: 1) veto de mapas (alternado até sobrar 1)  2) cada time bane 2 caçadores (A, B, A, B)
+// 3) todos escolhem o caçador. Os 4 banidos ficam fora da partida inteira, para os dois times.
 function captainOf(slots, team) { for (let i = team * 4; i < team * 4 + 4; i++) if (slots[i] && slots[i].kind === 'human') return slots[i].id; return null; }
 function startDraft(S, mode, vsBots) {
   App.draftSlots = S; App.slots = S.map(s => ({ ...s }));
-  App.draft = { maps: MAP_DEFS.map(m => m.id), out: [], turn: 0, cap: [captainOf(S, 0), captainOf(S, 1)], end: Date.now() + VETO_TIME * 1000, done: null, mode, vsBots, t0: Date.now() };
+  App.draft = { stage: 'map', maps: MAP_DEFS.map(m => m.id), out: [], turn: 0, cap: [captainOf(S, 0), captainOf(S, 1)], end: Date.now() + VETO_TIME * 1000, done: null, hbans: [], ready: [], mode, vsBots };
   clearInterval(App.draftIv);
   App.draftIv = setInterval(draftTick, 250);
   draftSync(); openDraft();
 }
 function draftLeft(D) { return D.maps.filter(m => !D.out.some(o => o.id === m)); }
+function draftBanned(D) { return D.hbans.map(b => b.h); }
 function draftSync() {
   const D = App.draft; if (!D) return;
-  if (App.role === 'host') App.tr.broadcast({ t: 'draft', d: { out: D.out, turn: D.turn, cap: D.cap, done: D.done, left: Math.max(0, D.end - Date.now()) }, slots: App.slots });
-  renderDraft();
+  if (App.role === 'host') App.tr.broadcast({ t: 'draft', d: { stage: D.stage, out: D.out, turn: D.turn, cap: D.cap, done: D.done, hbans: D.hbans, ready: D.ready, left: Math.max(0, D.end - Date.now()) }, slots: App.slots });
+  App.draftSig = ''; renderDraft();
 }
 function draftTick() {
   const D = App.draft; if (!D) { clearInterval(App.draftIv); return; }
   if (App.role !== 'client') {
-    if (D.done) { if (Date.now() >= D.end) draftFinish(); }
-    else {
-      const cap = D.cap[D.turn], waited = Date.now() - (D.end - VETO_TIME * 1000);
-      if ((cap == null && waited > 1400) || Date.now() >= D.end) { const L = draftLeft(D); draftBan(L[(Math.random() * L.length) | 0]); }
+    const now = Date.now();
+    if (D.stage === 'map') {
+      if (D.done) { if (now >= D.end) draftStage('ban'); }
+      else {
+        const cap = D.cap[D.turn], waited = now - (D.end - VETO_TIME * 1000);
+        if ((cap == null && waited > 1400) || now >= D.end) { const L = draftLeft(D); draftBan(L[(Math.random() * L.length) | 0]); }
+      }
+    } else if (D.stage === 'ban') {
+      if (D.hbans.length >= HBAN_TOTAL) { if (now >= D.end) draftStage('pick'); }
+      else {
+        const cap = D.cap[D.turn], waited = now - (D.end - HBAN_TIME * 1000);
+        if ((cap == null && waited > 1600) || now >= D.end) draftHBan(botBanChoice(D, D.turn));
+      }
+    } else if (D.stage === 'pick') {
+      const hum = App.slots.filter(x => x.kind === 'human');
+      if (now >= D.end || (hum.length && hum.every(x => D.ready.includes(x.id)))) draftFinish();
     }
   }
   renderDraftTimer();
 }
+// bot capitão: bane um caçador que o time inimigo está usando (ou um aleatório)
+function botBanChoice(D, team) {
+  const banned = draftBanned(D);
+  const enemy = App.slots.filter((x, i) => (i < 4 ? 0 : 1) !== team && x.kind !== 'empty').map(x => x.hunter).filter(h => !banned.includes(h));
+  const pool = HUNTER_IDS.filter(h => !banned.includes(h));
+  return enemy.length && Math.random() < 0.7 ? enemy[(Math.random() * enemy.length) | 0] : pool[(Math.random() * pool.length) | 0];
+}
+function draftStage(st) {
+  const D = App.draft; D.stage = st; D.turn = 0;
+  if (st === 'ban') D.end = Date.now() + HBAN_TIME * 1000;
+  if (st === 'pick') {
+    D.end = Date.now() + HPICK_TIME * 1000; D.ready = [];
+    // quem estava com caçador banido (ou repetido) recebe outro; bots escolhem
+    const banned = draftBanned(D);
+    for (let i = 0; i < 8; i++) {
+      const x = App.slots[i]; if (x.kind === 'empty') continue;
+      const team = i < 4 ? 0 : 1, used = teamHunters(App.slots, team, i);
+      if (banned.includes(x.hunter) || used.has(x.hunter) || x.kind === 'bot') {
+        const free = HUNTER_IDS.filter(h => !banned.includes(h) && !used.has(h));
+        const same = free.filter(h => HUNTERS[h].classe === HUNTERS[x.hunter].classe);
+        x.hunter = x.kind === 'bot' && !banned.includes(x.hunter) && !used.has(x.hunter) ? x.hunter : (same.length ? same : free)[0];
+      }
+    }
+  }
+  SFX.play('round', 0);
+  draftSync();
+}
 function draftVeto(id, map) {
-  const D = App.draft; if (!D || D.done || D.cap[D.turn] !== id || !draftLeft(D).includes(map)) return;
+  const D = App.draft; if (!D || D.stage !== 'map' || D.done || D.cap[D.turn] !== id || !draftLeft(D).includes(map)) return;
   draftBan(map);
 }
 function draftBan(map) {
   const D = App.draft;
   D.out.push({ id: map, team: D.turn }); D.turn ^= 1; D.end = Date.now() + VETO_TIME * 1000;
   const L = draftLeft(D);
-  if (L.length === 1) { D.done = L[0]; D.end = Date.now() + 3200; }
+  if (L.length === 1) { D.done = L[0]; D.end = Date.now() + 2500; }
   SFX.play('block', 0);
   draftSync();
+}
+function draftHBanReq(id, h) {
+  const D = App.draft; if (!D || D.stage !== 'ban' || D.hbans.length >= HBAN_TOTAL || D.cap[D.turn] !== id) return;
+  draftHBan(h);
+}
+function draftHBan(h) {
+  const D = App.draft;
+  if (!HUNTERS[h] || draftBanned(D).includes(h)) return;
+  D.hbans.push({ h, team: D.turn }); D.turn ^= 1;
+  D.end = Date.now() + (D.hbans.length >= HBAN_TOTAL ? 2500 : HBAN_TIME * 1000);
+  SFX.play('block', 0);
+  draftSync();
+}
+function draftPickReq(id, m) {
+  const D = App.draft; if (!D || D.stage !== 'pick') return;
+  const i = slotOf(id); if (i < 0) return;
+  if (m.t === 'ready') { if (!D.ready.includes(id)) D.ready.push(id); draftSync(); return; }
+  const h = m.hunter, team = i < 4 ? 0 : 1;
+  if (!HUNTERS[h] || draftBanned(D).includes(h) || teamHunters(App.slots, team, i).has(h) || D.ready.includes(id)) return;
+  App.slots[i].hunter = h; draftSync();
 }
 function draftFinish() {
   const D = App.draft; if (!D) return;
   clearInterval(App.draftIv); App.draft = null;
-  const S = App.draftSlots;
-  if (App.role === 'host') App.tr.broadcast({ t: 'start', slots: S, mode: D.mode, vsBots: D.vsBots, map: D.done });
-  beginGame(S, D.mode, D.vsBots, D.done);
+  const S = App.slots.map(x => ({ ...x })), bans = draftBanned(D);
+  if (App.role === 'host') App.tr.broadcast({ t: 'start', slots: S, mode: D.mode, vsBots: D.vsBots, map: D.done, bans });
+  beginGame(S, D.mode, D.vsBots, D.done, bans);
 }
-function myVeto(map) {
-  if (App.role === 'client') App.tr.send({ t: 'veto', map });
-  else draftVeto(App.myId, map);
+function draftSend(m) {
+  if (App.role === 'client') App.tr.send(m);
+  else if (m.t === 'veto') draftVeto(App.myId, m.map);
+  else if (m.t === 'hban') draftHBanReq(App.myId, m.hunter);
+  else draftPickReq(App.myId, m);
+  if (m.t === 'hpick') { App.myHunter = m.hunter; try { localStorage.setItem('ruptura-hunter', m.hunter); } catch (e) { } }
 }
 function openDraft() { show('draft'); App.draftSig = ''; renderDraft(); }
 function renderDraftTimer() {
   const D = App.draft, el = $('#draft-t'); if (!D || !el) return;
   const t = Math.max(0, Math.ceil((D.end - Date.now()) / 1000));
-  el.textContent = D.done ? '' : t + 's';
+  el.textContent = (D.stage === 'map' && D.done) || (D.stage === 'ban' && D.hbans.length >= HBAN_TOTAL) ? '' : t + 's';
+}
+function draftSteps(D) {
+  const st = ['map', 'ban', 'pick'], names = ['1 · Veto de mapas', '2 · Banimento de caçadores', '3 · Escolha'];
+  return `<div class="dsteps">${st.map((x, k) => `<span class="${x === D.stage ? 'on' : st.indexOf(D.stage) > k ? 'ok' : ''}">${names[k]}</span>`).join('')}</div>`;
 }
 function renderDraft() {
   const D = App.draft; if (!D || App.screen !== 'draft') return;
   const mi = slotOf(App.myId), myTeam = mi < 4 ? 0 : 1, capId = D.cap[D.turn];
-  const capSlot = App.slots.find(x => x.id === capId);
   const meT = { id: App.myId, team: myTeam };
-  const capName = capSlot ? displayName({ id: capSlot.id, name: capSlot.name, hide: capSlot.hide, hunter: capSlot.hunter, team: D.turn }, meT) : 'bot';
-  const mine = capId === App.myId && !D.done;
-  const L = draftLeft(D);
-  let st;
-  if (D.done) st = `<b style="color:var(--gold)">Mapa escolhido: ${mapDef(D.done).nome}</b><small>${mapDef(D.done).dica}</small>`;
-  else st = `<b style="color:${TEAMS[D.turn].main}">Vez de ${TEAMS[D.turn].name}</b> — ${mine ? '<span style="color:var(--gold)">você é o capitão: clique num mapa para BANIR</span>' : `capitão: ${esc(capName)}`}<small>Ban ${D.out.length + 1} de ${MAP_DEFS.length - 1} · ${D.turn === myTeam ? 'seu time' : 'time adversário'} bane · sobra 1 mapa</small>`;
-  $('#draft-st').innerHTML = st + '<span id="draft-t" class="draft-t"></span>';
+  const nameOf = (x, t) => x ? esc(displayName({ id: x.id, name: x.name, hide: x.hide, hunter: x.hunter, team: t }, meT)) : 'bot';
+  const capName = nameOf(App.slots.find(x => x.id === capId), D.turn);
+  const isCap = capId === App.myId;
+  $('.draft-wrap .title').textContent = D.stage === 'map' ? 'Veto de Mapas' : D.stage === 'ban' ? 'Banimento de Caçadores' : 'Escolha seu Caçador';
   const box = $('#draft-maps'); box.innerHTML = '';
-  for (const id of D.maps) {
-    const m = mapDef(id), out = D.out.find(o => o.id === id), chosen = D.done === id;
-    const d = document.createElement('div');
-    d.className = 'dmap' + (out ? ' out' : '') + (chosen ? ' chosen' : '') + (mine && !out ? ' can' : '');
-    d.appendChild(mapPreview(id, 240));
-    d.insertAdjacentHTML('beforeend', `<div class="dm-i"><div class="dm-n">${m.nome}</div><div class="dm-t">${m.tag}</div><div class="dm-d">${m.desc}</div></div>${out ? `<div class="dm-x" style="color:${TEAMS[out.team].main}">BANIDO<small>${TEAMS[out.team].name}</small></div>` : ''}${chosen ? '<div class="dm-x ok">JOGAR AQUI</div>' : ''}`);
-    if (mine && !out) d.onclick = () => { SFX.init(); myVeto(id); };
-    box.appendChild(d);
+  box.className = D.stage === 'map' ? 'draft-maps' : 'draft-hunters';
+  let st;
+  if (D.stage === 'map') {
+    const mine = isCap && !D.done;
+    if (D.done) st = `<b style="color:var(--gold)">Mapa escolhido: ${mapDef(D.done).nome}</b><small>A seguir: cada time bane 2 caçadores</small>`;
+    else st = `<b style="color:${TEAMS[D.turn].main}">Vez de ${TEAMS[D.turn].name}</b> — ${mine ? '<span style="color:var(--gold)">você é o capitão: clique num mapa para BANIR</span>' : `capitão: ${capName}`}<small>Ban ${D.out.length + 1} de ${MAP_DEFS.length - 1} · ${D.turn === myTeam ? 'seu time' : 'time adversário'} bane · sobra 1 mapa</small>`;
+    for (const id of D.maps) {
+      const m = mapDef(id), out = D.out.find(o => o.id === id), chosen = D.done === id;
+      const d = document.createElement('div');
+      d.className = 'dmap' + (out ? ' out' : '') + (chosen ? ' chosen' : '') + (mine && !out ? ' can' : '');
+      d.appendChild(mapPreview(id, 240));
+      d.insertAdjacentHTML('beforeend', `<div class="dm-i"><div class="dm-n">${m.nome}</div><div class="dm-t">${m.tag}</div><div class="dm-d">${m.desc}</div></div>${out ? `<div class="dm-x" style="color:${TEAMS[out.team].main}">BANIDO<small>${TEAMS[out.team].name}</small></div>` : ''}${chosen ? '<div class="dm-x ok">JOGAR AQUI</div>' : ''}`);
+      if (mine && !out) d.onclick = () => { SFX.init(); draftSend({ t: 'veto', map: id }); };
+      box.appendChild(d);
+    }
+  } else {
+    const banned = draftBanned(D), ban = D.stage === 'ban', doneB = D.hbans.length >= HBAN_TOTAL;
+    const myIdx = mi, mySlot = App.slots[myIdx];
+    const used = myIdx >= 0 ? teamHunters(App.slots, myTeam, myIdx) : new Set();
+    const ready = D.ready.includes(App.myId);
+    if (ban) {
+      const canBan = isCap && !doneB;
+      st = doneB ? `<b style="color:var(--gold)">Banimentos concluídos</b><small>Esses 4 caçadores estão fora da partida inteira, para os dois times</small>`
+        : `<b style="color:${TEAMS[D.turn].main}">Vez de ${TEAMS[D.turn].name} banir</b> — ${canBan ? '<span style="color:var(--gold)">você é o capitão: clique num caçador para BANIR</span>' : `capitão: ${capName}`}<small>Ban ${D.hbans.length + 1} de ${HBAN_TOTAL} · cada time bane 2 · o banido não pode ser usado por NENHUM dos times na partida toda</small>`;
+    } else {
+      const left = App.slots.filter(x => x.kind === 'human' && !D.ready.includes(x.id)).length;
+      st = `<b style="color:var(--gold)">Escolha seu caçador</b> — não pode repetir no time nem usar banidos<small>${ready ? `Você confirmou${left ? ` · esperando ${left} jogador(es)` : ''}` : 'Clique num caçador e depois em Confirmar'} · dá pra trocar entre os rounds também</small>`;
+    }
+    // faixa dos banidos
+    let html = `<div class="dh-bans">${[0, 1].map(t => `<div class="dh-bt" style="--tc:${TEAMS[t].main}"><span>${TEAMS[t].name}${t === myTeam ? ' (seu time)' : ''} baniu</span><div>${[0, 1].map(k => { const b = D.hbans.filter(x => x.team === t)[k]; return b ? `<div class="dh-ban"><canvas data-h="${b.h}"></canvas><i>✕</i><small>${HUNTERS[b.h].nome}</small></div>` : `<div class="dh-ban empty">?</div>`; }).join('')}</div></div>`).join('')}</div>`;
+    // times (quem está com quem)
+    html += `<div class="dh-teams">${[0, 1].map(t => `<div class="dh-team" style="--tc:${TEAMS[t].main}"><span>${TEAMS[t].name}</span>${App.slots.slice(t * 4, t * 4 + 4).map(x => x.kind === 'empty' ? '' : `<div class="dh-p${x.id === App.myId ? ' me' : ''}"><canvas data-h="${x.hunter}"></canvas><b>${nameOf(x, t)}</b><small>${HUNTERS[x.hunter].nome}${D.ready.includes(x.id) ? ' ✓' : ''}</small></div>`).join('')}</div>`).join('')}</div>`;
+    // grade por classe
+    if (!ban && mySlot) html += `<div class="dh-ok"><button class="btn big gold" id="dh-ready" ${ready ? 'disabled' : ''}>${ready ? 'Confirmado ✓' : `Confirmar ${HUNTERS[mySlot.hunter].nome}`}</button></div>`;
+    html += '<div class="bu-grid">';
+    for (const cl of Object.keys(CLASSES)) {
+      const C = CLASSES[cl];
+      html += `<div class="bu-col"><div class="bu-ch" style="color:${C.cor}">${C.icone} ${C.nome}</div>`;
+      for (const h of HUNTER_IDS.filter(x => HUNTERS[x].classe === cl)) {
+        const gone = banned.includes(h), taken = !ban && used.has(h), cur = !ban && mySlot && mySlot.hunter === h;
+        const can = ban ? isCap && !doneB && !gone : !gone && !taken && !ready;
+        const enemyHas = App.slots.some((x, i) => x.kind !== 'empty' && (i < 4 ? 0 : 1) !== myTeam && x.hunter === h);
+        const tag = ban && enemyHas ? '<em class="t-en">inimigo</em>' : taken ? '<em class="t-my">no seu time</em>' : '';
+        html += `<div class="bu-card${gone ? ' gone' : ''}${taken ? ' taken' : ''}${cur ? ' cur' : ''}${can ? ' can' : ''}${ban ? ' banpick' : ''}" data-h="${h}" title="${HUNTERS[h].titulo} — ${C.desc}"><canvas data-h="${h}"></canvas><div class="bu-cn">${HUNTERS[h].nome}${tag}</div>${gone ? '<i>✕</i>' : ''}</div>`;
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    box.innerHTML = html;
+    box.querySelectorAll('canvas[data-h]').forEach(c => { const pc = portrait(c.dataset.h, 116); c.width = pc.width; c.height = pc.height; c.getContext('2d').drawImage(pc, 0, 0); });
+    box.querySelectorAll('.bu-card.can').forEach(d => d.onclick = () => { SFX.init(); SFX.play('click'); draftSend(ban ? { t: 'hban', hunter: d.dataset.h } : { t: 'hpick', hunter: d.dataset.h }); });
+    const rb = $('#dh-ready'); if (rb) rb.onclick = () => { SFX.init(); SFX.play('click'); draftSend({ t: 'ready' }); };
   }
+  $('#draft-st').innerHTML = draftSteps(D) + st + '<span id="draft-t" class="draft-t"></span>';
   renderDraftTimer();
-}
-function leaveRoom() {
-  if (App.search) stopSearch(true);
-  if (App.tr) { try { App.tr.close(); } catch (e) { } }
-  clearInterval(App.draftIv); App.draft = null;
-  App.tr = null; App.role = 'none'; App.inGame = false; App.sim = null; App.cs = null; App.paused = false; App.expect = 0; App.vsBots = false;
-  $('#pause').classList.remove('show');
-  renderAcct();
-  show('menu');
-}
-function playAgain() {
-  if (App.matchMode === 'ranked') { leaveRoom(); startRankedParty(); return; }
-  if (App.role === 'client') { show('lobby'); msg('#lob-msg', 'Aguardando o dono da sala...'); return; }
-  App.inGame = false; App.sim = null; App.vsBots = false;
-  App.slots = App.slots.map(s => s.kind === 'human' && (s.id === App.myId || [...App.peers.values()].some(p => p.id === s.id)) ? s : { kind: 'empty' });
-  const me = App.slots[slotOf(App.myId)]; if (me) Object.assign(me, mySlotInfo());
-  if (App.role === 'host') App.tr.broadcast({ t: 'tolobby', slots: App.slots });
-  openLobby();
 }
 
 // ------------------------------------------------------------------
@@ -509,12 +604,12 @@ function clientOnMsg(m) {
       break;
     case 'draft': {
       const d = m.d; App.slots = m.slots;
-      App.draft = { maps: MAP_DEFS.map(x => x.id), out: d.out, turn: d.turn, cap: d.cap, done: d.done, end: Date.now() + d.left };
+      App.draft = { stage: d.stage, maps: MAP_DEFS.map(x => x.id), out: d.out, turn: d.turn, cap: d.cap, done: d.done, hbans: d.hbans, ready: d.ready, end: Date.now() + d.left };
       clearInterval(App.draftIv); App.draftIv = setInterval(draftTick, 250);
-      if (App.screen !== 'draft') openDraft(); else renderDraft();
+      if (App.screen !== 'draft') openDraft(); else { App.draftSig = ''; renderDraft(); }
       break;
     }
-    case 'start': clearInterval(App.draftIv); App.draft = null; beginGame(m.slots, m.mode || 'standard', !!m.vsBots, m.map); break;
+    case 'start': clearInterval(App.draftIv); App.draft = null; beginGame(m.slots, m.mode || 'standard', !!m.vsBots, m.map, m.bans); break;
     case 's':
       if (!App.cs) return;
       App.cs.apply(m, App.myId);
@@ -528,13 +623,13 @@ function clientOnClose() { if (App.role !== 'client' || App.moving) return; leav
 //  Partida
 // ------------------------------------------------------------------
 let hostLast = 0;
-function beginGame(slots, mode, vsBots, map) {
+function beginGame(slots, mode, vsBots, map, bans) {
   App.slots = slots.map(s => ({ ...s }));
   setMap(map || 'vesper'); App.map = CUR_MAP.id;
   App.matchMode = mode; App.vsBots = vsBots; App.expect = 0;
   App.inGame = true; App.ended = false; App.paused = false; App.pending = []; App.acc = 0; App.ticks = 0; hostLast = 0; App.recorded = null;
-  if (App.role === 'client') { App.sim = null; App.cs = new ClientState(slots); }
-  else { App.sim = new Sim(slots, { mode, map: CUR_MAP.id }); App.cs = null; handleEvents(App.sim.drainEvents(), App.sim); }
+  if (App.role === 'client') { App.sim = null; App.cs = new ClientState(slots); App.cs.bans = bans || []; }
+  else { App.sim = new Sim(slots, { mode, map: CUR_MAP.id, bans: bans || [] }); App.cs = null; handleEvents(App.sim.drainEvents(), App.sim); }
   buildHud();
   show('game');
   R.parts = []; R.anim.clear();
@@ -641,14 +736,6 @@ function handleEvents(evs, S) {
         break;
       }
       case 'fight': flashBanner('LUTEM!', '', 900); SFX.play('tick', 0); break;
-      case 'bans': {
-        const [a, b] = e.b;
-        flashBanner('BANIDOS', `${HUNTERS[a].nome} (${TEAMS[0].name}) · ${HUNTERS[b].nome} (${TEAMS[1].name})`, 2600); SFX.play('block', 0);
-        feed(`Banidos no round ${e.n}: <b>${HUNTERS[a].nome}</b> e <b>${HUNTERS[b].nome}</b>`);
-        App.swapSig = '';
-        break;
-      }
-      case 'forced': if (e.id === me.id) feed(`Seu caçador foi banido — você agora é <b>${HUNTERS[e.h].nome}</b> (pode trocar agora)`); break;
       case 'windwarn': flashBanner('RAJADA DE VENTO', e.dir > 0 ? 'o vento vai empurrar todos para o SUL ↓' : 'o vento vai empurrar todos para o NORTE ↑', 1600); SFX.play('tick', 0); break;
       case 'wind': SFX.play('dash', 0); break;
       case 'bellring': SFX.play('aurora', 0); flashBanner('O SINO TOCOU', e.team === me.team ? 'Seu time vê todos os inimigos por 5s' : 'Os inimigos estão vendo vocês por 5s!', 1800); break;
@@ -741,36 +828,28 @@ function requestSwap(h) {
   if (App.role === 'client') App.tr.send({ t: 'swap', hunter: h });
   else if (App.sim) App.sim.requestSwap(App.myId, h);
 }
-function requestBan(h) {
-  if (App.role === 'client') App.tr.send({ t: 'ban', hunter: h });
-  else if (App.sim) App.sim.requestBan(App.myId, h);
-  App.myVote = h; App.swapSig = '';
-}
 function updateSwap(S, me) {
   const el = $('#swap');
-  const ban = S.phase === 'ban';
-  const open = me && !App.ended && (S.phase === 'roundEnd' || S.phase === 'countdown' || ban) && App.screen === 'game';
-  el.classList.toggle('show', !!open); el.classList.toggle('banmode', !!(open && ban));
-  if (!open) { App.swapSig = ''; App.myVote = null; return; }
+  const ph = S.phase;
+  const open = me && !App.ended && (ph === 'roundEnd' || ph === 'countdown') && App.screen === 'game';
+  el.classList.toggle('show', !!open);
+  if (!open) { App.swapSig = ''; return; }
   const bans = S.bans || [];
-  const left = S.phase === 'roundEnd' ? S.phaseT + (S.round < BAN_ROUNDS ? BAN_TIME + 5 : 3) : S.phaseT;
-  setText($('#swap-h-b'), 'swaphb', ban ? `Banimento · Round ${S.round}` : 'Trocar de caçador');
-  setText($('#swap-t'), 'swapt', ban ? `${Math.max(0, Math.ceil(left))}s · vote em quem banir — o banido sai para OS DOIS times` : `${Math.max(0, Math.ceil(left))}s · não repete no time${bans.length ? ' · banidos: ' + bans.map(h => HUNTERS[h].nome).join(', ') : ''}`);
+  const left = ph === 'roundEnd' ? S.phaseT + 3 : S.phaseT;
+  setText($('#swap-t'), 'swapt', `${Math.max(0, Math.ceil(left))}s · não repete no time${bans.length ? ' · banidos: ' + bans.map(h => HUNTERS[h].nome).join(', ') : ''}`);
   const used = new Set(S.players.filter(p => p.team === me.team && p.id !== me.id).map(p => p.hunter));
-  const tally = new Map(); if (ban && S.votes) for (const [id, h] of S.votes) { const p = S.players.find(q => q.id === id); if (p && p.team === me.team) tally.set(h, (tally.get(h) || 0) + 1); }
-  const myV = ban && S.votes && S.votes.get(me.id);
-  const sig = (ban ? 'B' : 'S') + me.hunter + '|' + [...used].sort().join(',') + '|' + bans.join(',') + '|' + [...tally].join(';') + '|' + myV;
+  const sig = me.hunter + '|' + [...used].sort().join(',') + '|' + bans.join(',');
   if (sig === App.swapSig) return;
   App.swapSig = sig;
   const L = $('#swap-list'); L.innerHTML = '';
   for (const h of HUNTER_IDS) {
     const H = HUNTERS[h], C = CLASSES[H.classe], banned = bans.includes(h);
     const d = document.createElement('div');
-    d.className = 'sw' + (!ban && h === me.hunter ? ' cur' : '') + (banned ? ' banned' : !ban && used.has(h) ? ' taken' : '') + (ban && myV === h ? ' vote' : '');
-    d.title = `${H.nome} — ${C.nome}` + (banned ? ' (banido)' : '');
+    d.className = 'sw' + (h === me.hunter ? ' cur' : '') + (banned ? ' banned' : used.has(h) ? ' taken' : '');
+    d.title = `${H.nome} — ${C.nome}` + (banned ? ' (banido)' : used.has(h) ? ' (já está no seu time)' : '');
     d.appendChild(portrait(h, 116));
-    d.insertAdjacentHTML('beforeend', `<span class="cl" style="color:${C.cor}">${C.icone}</span><span>${H.nome}</span>${tally.get(h) ? `<b class="vt">${tally.get(h)}</b>` : ''}${banned ? '<i class="bx">✕</i>' : ''}`);
-    if (!banned) d.onclick = () => { SFX.init(); SFX.play('click'); ban ? requestBan(h) : requestSwap(h); };
+    d.insertAdjacentHTML('beforeend', `<span class="cl" style="color:${C.cor}">${C.icone}</span><span>${H.nome}</span>${banned ? '<i class="bx">✕</i>' : ''}`);
+    if (!banned) d.onclick = () => { SFX.init(); SFX.play('click'); requestSwap(h); };
     L.appendChild(d);
   }
 }
@@ -804,7 +883,6 @@ function updateHud(S, me, dt) {
   setText(HUD.rd, 'rd', (ot ? 'PRORROGAÇÃO · ' : 'ROUND ') + S.round + (S.night ? ' · NOITE' : ' · DIA'));
   let tm;
   if (S.phase === 'countdown') tm = String(Math.ceil(S.phaseT));
-  else if (S.phase === 'ban') tm = 'BAN ' + Math.ceil(S.phaseT);
   else { const t = Math.floor(S.fightT); tm = Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); }
   setText(HUD.tm, 'tm', tm);
   if (S.phase === 'countdown' && S.phaseT < 3) {

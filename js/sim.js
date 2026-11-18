@@ -72,7 +72,7 @@ class Sim {
         x: 0, y: 0, vx: 0, vy: 0, z: 0, aim: team ? Math.PI : 0, r: H.r,
         hp: H.hp, maxHp: H.hp, shield: 0, shieldT: 0, alive: true,
         cd: { basic: 0, q: 0, e: 0, r: 0, dash: 0 },
-        stun: 0, slowT: 0, slowAmt: 0, spdT: 0, spdAmt: 0, huntT: 0, bastionT: 0, rootT: 0, parryT: 0, wardT: 0, spinT: 0, spinAcc: 0, dashHit: null, linkT: 0, linkBy: 0, armorT: 0, frenzyT: 0, quakeN: 0, quakeAcc: 0,
+        stun: 0, slowT: 0, slowAmt: 0, spdT: 0, spdAmt: 0, huntT: 0, bastionT: 0, rootT: 0, parryT: 0, wardT: 0, spinT: 0, spinAcc: 0, dashHit: null, linkT: 0, linkBy: 0, armorT: 0, frenzyT: 0, quakeN: 0, quakeAcc: 0, poisonT: 0, poisonBy: 0, tauntT: 0, tauntBy: 0,
         dashT: 0, dvx: 0, dvy: 0, trail: false, trailAcc: 0, leap: null, invuln: 0,
         kills: 0, deaths: 0, dmg: 0, heal: 0, revive: 0, soulX: 0, soulY: 0,
         lastHitBy: null, lastHitT: -99, tickDmg: 0, tickHeal: 0, tickT: 0,
@@ -90,8 +90,7 @@ class Sim {
     this.storm = { x: WORLD_W / 2, y: WORLD_H / 2, r: 1500 };
     this.night = false;
     this.winner = -1;
-    this.bans = []; this.votes = new Map(); this.banLog = [];
-    this.noBans = !!opts.noBans;
+    this.bans = (opts.bans || []).filter(h => HUNTERS[h]); // banidos antes da partida (valem para os dois times)
     this.map = opts.map || CUR_MAP.id;
     if (CUR_MAP.id !== this.map) setMap(this.map);
     this.reveal = [0, 0]; this.bell = { p: [0, 0], cd: 0 }; this.geyserT = 9; this.wind = { t: 12, dir: 1, on: 0, warn: 0 };
@@ -112,7 +111,7 @@ class Sim {
   byId(id) { return this.players.find(p => p.id === id); }
 
   // ---------- troca de caçador entre rounds ----------
-  canSwap() { return this.phase === 'roundEnd' || this.phase === 'countdown' || this.phase === 'ban'; }
+  canSwap() { return this.phase === 'roundEnd' || this.phase === 'countdown'; }
   requestSwap(id, hid) {
     const p = this.byId(id);
     if (!p || !HUNTERS[hid] || !this.canSwap() || p.hunter === hid || this.bans.includes(hid)) return false;
@@ -134,45 +133,6 @@ class Sim {
       if (free.length) this.requestSwap(p.id, free[(Math.random() * free.length) | 0]);
     }
   }
-  // ---------- Pick & Ban: cada time vota 1 banimento nos 3 primeiros rounds (vale para os dois times) ----------
-  requestBan(id, hid) {
-    const p = this.byId(id);
-    if (!p || this.phase !== 'ban' || !HUNTERS[hid] || this.bans.includes(hid)) return false;
-    this.votes.set(id, hid); return true;
-  }
-  botBanVotes() {
-    for (const p of this.players) {
-      if (!p.bot || this.votes.has(p.id) || Math.random() > 0.02) continue;
-      // bot vota no caçador inimigo mais forte que ainda não foi banido (ou num aleatório)
-      const enemy = this.players.filter(q => q.team !== p.team && !this.bans.includes(q.hunter)).map(q => q.hunter);
-      const mate = [...this.votes].find(([vid]) => this.byId(vid)?.team === p.team);
-      const pool = HUNTER_IDS.filter(h => !this.bans.includes(h));
-      const h = mate && Math.random() < 0.7 ? mate[1] : enemy.length && Math.random() < 0.6 ? enemy[(Math.random() * enemy.length) | 0] : pool[(Math.random() * pool.length) | 0];
-      this.votes.set(p.id, h);
-    }
-  }
-  resolveBans() {
-    const pick = [];
-    for (const t of [0, 1]) {
-      const tally = new Map();
-      for (const [id, h] of this.votes) { const p = this.byId(id); if (p && p.team === t && !this.bans.includes(h) && !pick.includes(h)) tally.set(h, (tally.get(h) || 0) + 1); }
-      let best = [], bn = 0;
-      for (const [h, n] of tally) { if (n > bn) { bn = n; best = [h]; } else if (n === bn) best.push(h); }
-      if (!best.length) { const pool = HUNTER_IDS.filter(h => !this.bans.includes(h) && !pick.includes(h)); best = [pool[(Math.random() * pool.length) | 0]]; }
-      pick.push(best[(Math.random() * best.length) | 0]);
-    }
-    this.bans.push(...pick); this.banLog.push(pick); this.votes.clear();
-    this.ev({ k: 'bans', b: pick, all: this.bans.slice(), n: this.round });
-    // quem estava com um caçador banido troca na hora
-    for (const p of this.players) {
-      if (!this.bans.includes(p.hunter)) continue;
-      const used = new Set(this.players.filter(q => q.team === p.team && q !== p).map(q => q.hunter));
-      const free = HUNTER_IDS.filter(h => !used.has(h) && !this.bans.includes(h));
-      const same = free.filter(h => HUNTERS[h].classe === HUNTERS[p.hunter].classe);
-      const nh = (same.length ? same : free)[0];
-      if (nh) { this.requestSwap(p.id, nh); p.cd.r = 18; this.ev({ k: 'forced', id: p.id, h: nh }); }
-    }
-  }
   startRound() {
     this.round++;
     this.night = this.round % 2 === 0;
@@ -184,14 +144,13 @@ class Sim {
       Object.assign(p, {
         x: sp.x, y: sp.y, vx: 0, vy: 0, z: 0, aim: p.team ? Math.PI : 0, hp: p.maxHp, shield: 0, shieldT: 0, alive: true,
         stun: 0, slowT: 0, spdT: 0, huntT: 0, bastionT: 0, dashT: 0, leap: null, invuln: 0, revive: 0, trail: false,
-        rootT: 0, parryT: 0, wardT: 0, spinT: 0, dashHit: null, linkT: 0, armorT: 0, frenzyT: 0, quakeN: 0,
+        rootT: 0, parryT: 0, wardT: 0, spinT: 0, dashHit: null, linkT: 0, armorT: 0, frenzyT: 0, quakeN: 0, poisonT: 0, tauntT: 0,
       });
       p.cd = { basic: 0, q: 0, e: 0, r: 18, dash: 0 }; p.dashHit = null; p.spinAcc = 0;
     }
     this.storm.r = 1500;
     this.reveal = [0, 0]; this.bell = { p: [0, 0], cd: 0 }; this.geyserT = 9; this.wind = { t: 12, dir: this.round % 2 ? 1 : -1, on: 0, warn: 0 };
     this.phase = 'countdown'; this.phaseT = 3; this.fightT = 0;
-    if (!this.noBans && this.round <= BAN_ROUNDS) { this.phase = 'ban'; this.phaseT = BAN_TIME; this.votes.clear(); }
     const [a, b] = this.score;
     this.ev({ k: 'round', n: this.round, night: this.night, ot: this.mode === 'ranked' && a >= WIN_ROUNDS - 1 && b >= WIN_ROUNDS - 1, dec: this.mode !== 'ranked' && a === WIN_ROUNDS - 1 && b === WIN_ROUNDS - 1 });
   }
@@ -230,13 +189,6 @@ class Sim {
     for (const p of this.players) { p.px = p.x; p.py = p.y; p.pz = p.z; }
     for (const pr of this.projectiles) { pr.px = pr.x; pr.py = pr.y; }
     this.visCache.clear();
-    if (this.phase === 'ban') {
-      this.phaseT -= dt;
-      this.botBanVotes();
-      for (const p of this.players) { p.aim = Math.atan2(p.input.ay - p.y, p.input.ax - p.x) || p.aim; }
-      if (this.phaseT <= 0 || this.players.every(p => this.votes.has(p.id))) { this.resolveBans(); this.phase = 'countdown'; this.phaseT = 5; }
-      return;
-    }
     if (this.phase === 'countdown') {
       this.phaseT -= dt;
       for (const p of this.players) { p.aim = Math.atan2(p.input.ay - p.y, p.input.ax - p.x) || p.aim; }
@@ -339,6 +291,12 @@ class Sim {
       for (const p of this.players) {
         if (!p.alive || dist(p.x, p.y, z.x, z.y) > z.r + p.r * 0.5) continue;
         const ally = p.team === z.team;
+        if (z.trap) {
+          if (!ally && z.t < z.T - 0.6) { this.damage(p, 85, this.byId(z.owner)); p.rootT = Math.max(p.rootT, 1.6); this.ev({ k: 'root', id: p.id }); this.ev({ k: 'trap', x: z.x, y: z.y }); z.t = 0; break; }
+          continue;
+        }
+        if (z.ward && ally) p.wardT = Math.max(p.wardT, 0.3);
+        if (z.poison && !ally) { p.poisonT = Math.max(p.poisonT, 1.5); p.poisonBy = z.owner; }
         if (z.heal && ally) this.heal(p, z.heal * dt, this.byId(z.owner), true);
         if (z.dps && !ally) this.damage(p, z.dps * dt, this.byId(z.owner), true);
         if (z.slow && !ally) { p.slowT = Math.max(p.slowT, 0.15); p.slowAmt = Math.max(p.slowAmt, z.slow); }
@@ -373,6 +331,11 @@ class Sim {
     if (p.linkT > 0) { p.linkT -= dt; if (p.alive) this.heal(p, 22 * dt, this.byId(p.linkBy), true); }
     p.frenzyT = Math.max(0, p.frenzyT - dt);
     p.revealT = Math.max(0, (p.revealT || 0) - dt);
+    if (p.poisonT > 0) { p.poisonT -= dt; if (p.alive) this.damage(p, 20 * dt, this.byId(p.poisonBy), true); }
+    if (p.tauntT > 0) {
+      p.tauntT -= dt; const tb = this.byId(p.tauntBy);
+      if (tb && tb.alive) { p.input.ax = tb.x; p.input.ay = tb.y; p.slowT = Math.max(p.slowT, 0.1); p.slowAmt = Math.max(p.slowAmt, 0.25); } else p.tauntT = 0;
+    }
     if (p.armorT > 0) { p.armorT -= dt; p.stun = 0; p.slowT = 0; p.rootT = 0; }
     if (p.shieldT > 0) { p.shieldT -= dt; if (p.shieldT <= 0) p.shield = 0; }
     // emite números acumulados de dano/cura contínuos
@@ -404,7 +367,7 @@ class Sim {
       p.x = L.sx + (L.tx - L.sx) * f; p.y = L.sy + (L.ty - L.sy) * f;
       p.z = Math.sin(f * Math.PI) * 130;
       p.invuln = 0.05;
-      if (f >= 1) { const kind = L.kind; p.leap = null; p.z = 0; if (kind === 'fera') this.feraLand(p); else if (kind === 'pad') this.collide(p); else this.rochaLand(p); }
+      if (f >= 1) { const kind = L.kind; p.leap = null; p.z = 0; if (kind === 'fera') this.feraLand(p); else if (kind === 'pad') this.collide(p); else if (kind === 'cometa') this.cometaLand(p); else this.rochaLand(p); }
     } else if (p.dashT > 0) {
       p.dashT -= dt;
       const ox = p.x, oy = p.y;
@@ -641,6 +604,11 @@ class Sim {
     this.collide(p);
     this.ev({ k: 'boom', x: p.x, y: p.y, r: 110, c: 'claw' });
   }
+  cometaLand(p) {
+    for (const t of this.enemiesIn(p.x, p.y, 150, p.team)) { this.damage(t, 95, p); t.stun = Math.max(t.stun, 0.8); }
+    this.collide(p);
+    this.ev({ k: 'boom', x: p.x, y: p.y, r: 150, c: 'meteor' });
+  }
   rochaLand(p) {
     for (const t of this.enemiesIn(p.x, p.y, 210, p.team)) { this.damage(t, 110, p); t.stun = Math.max(t.stun, 1.2); }
     this.collide(p);
@@ -768,6 +736,11 @@ function dashTo(p, x, y, T) {
   p.dashT = T; p.dvx = (x - p.x) / T; p.dvy = (y - p.y) / T; p.trail = false;
 }
 const ZONE_END = {
+  meteor(sim, z) {
+    const o = sim.byId(z.owner);
+    for (const t of sim.enemiesIn(z.x, z.y, z.r, z.team)) { sim.damage(t, 85, o); t.stun = Math.max(t.stun, 0.5); }
+    sim.ev({ k: 'boom', x: z.x, y: z.y, r: z.r, c: 'meteor' });
+  },
   geyser(sim, z) {
     for (const t of sim.players) {
       if (!t.alive || t.leap || dist(t.x, t.y, z.x, z.y) > z.r + t.r) continue;
@@ -923,6 +896,52 @@ Object.assign(HUNTER_LOGIC, {
     q(sim, p) { p.dashT = 0.35; p.dvx = Math.cos(p.aim) * 1300; p.dvy = Math.sin(p.aim) * 1300; p.dashHit = { dmg: 55, stun: 1.0, stop: true, hit: new Set() }; },
     e(sim, p) { p.armorT = 3; sim.ev({ k: 'shield', id: p.id, from: p.id }); },
     r(sim, p) { p.quakeN = 3; p.quakeAcc = 0.5; },
+  },
+});
+
+Object.assign(PROJ_HIT, {
+  sting(sim, pr, o, t) { sim.damage(t, pr.dmg, o); t.poisonT = Math.max(t.poisonT, 3); t.poisonBy = pr.owner; },
+  web(sim, pr, o, t) { sim.damage(t, pr.dmg, o); t.slowT = Math.max(t.slowT, 1.2); t.slowAmt = Math.max(t.slowAmt, 0.35); },
+});
+Object.assign(HUNTER_LOGIC, {
+  vespa: {
+    basic(sim, p) { sim.shoot(p, { kind: 'sting', speed: 1250, range: 640, r: 6, dmg: 38 }); sim.ev({ k: 'shot', id: p.id, h: 'vespa' }); },
+    q(sim, p) { for (const da of [-0.17, 0, 0.17]) sim.shoot(p, { kind: 'sting', speed: 1300, range: 640, r: 7, dmg: 48, ang: p.aim + da }); sim.ev({ k: 'shot', id: p.id, h: 'vespa' }); },
+    e(sim, p) { const [x, y] = sim.reachPoint(p, 420); dashTo(p, x, y, 0.2); p.invuln = Math.max(p.invuln, 0.15); sim.ev({ k: 'dash', id: p.id, x: p.x, y: p.y }); },
+    r(sim, p) { const [x, y] = sim.aimPoint(p, 700); sim.zones.push({ id: sim.nextId++, type: 'swarm', x, y, r: 190, t: 4, T: 4, team: p.team, owner: p.id, dps: 38, slow: 0.25, poison: true }); },
+  },
+  cometa: {
+    basic(sim, p) { sim.shoot(p, { kind: 'star', speed: 1000, range: 560, r: 8, dmg: 45 }); sim.ev({ k: 'shot', id: p.id, h: 'cometa' }); },
+    q(sim, p) { const [x, y] = sim.reachPoint(p, 520); if (dist(x, y, p.x, p.y) < 40) return false; p.leap = { sx: p.x, sy: p.y, tx: x, ty: y, t: 0, T: 0.55, kind: 'cometa' }; p.dashT = 0; },
+    e(sim, p) { p.shield = Math.max(p.shield, 120); p.shieldT = 3; p.spdT = 2; p.spdAmt = 0.3; sim.ev({ k: 'shield', id: p.id, from: p.id }); },
+    r(sim, p) {
+      const [x, y] = sim.aimPoint(p, 700);
+      for (let i = 0; i < 5; i++) { const a = Math.random() * Math.PI * 2, d = i ? 60 + Math.random() * 140 : 0; const T = 0.7 + i * 0.32; sim.zones.push({ id: sim.nextId++, type: 'meteor', x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, r: 95, t: T, T, team: p.team, owner: p.id, onEnd: 'meteor' }); }
+    },
+  },
+  teia: {
+    basic(sim, p) { sim.shoot(p, { kind: 'web', speed: 880, range: 620, r: 8, dmg: 40 }); sim.ev({ k: 'shot', id: p.id, h: 'teia' }); },
+    q(sim, p) {
+      const mine = sim.zones.filter(z => z.type === 'trap' && z.owner === p.id); if (mine.length >= 3) mine[0].t = 0;
+      const [x, y] = sim.aimPoint(p, 520); sim.zones.push({ id: sim.nextId++, type: 'trap', x, y, r: 55, t: 14, T: 14, team: p.team, owner: p.id, trap: true });
+    },
+    e(sim, p) { p.shield = Math.max(p.shield, 150); p.shieldT = 3; p.slowT = 0; p.slowAmt = 0; p.rootT = 0; p.poisonT = 0; sim.ev({ k: 'shield', id: p.id, from: p.id }); },
+    r(sim, p) { const [x, y] = sim.aimPoint(p, 650); sim.zones.push({ id: sim.nextId++, type: 'bigweb', x, y, r: 270, t: 4.5, T: 4.5, team: p.team, owner: p.id, dps: 26, slow: 0.5, root: 1.1 }); },
+  },
+  brisa: {
+    basic(sim, p) { sim.shoot(p, { kind: 'gust', speed: 960, range: 600, r: 9, dmg: 32, healAlly: 26 }); sim.ev({ k: 'shot', id: p.id, h: 'brisa' }); },
+    q(sim, p) { for (const a of sim.players) if (a.alive && a.team === p.team && dist(a.x, a.y, p.x, p.y) < 280 + a.r) { a.spdT = 2.5; a.spdAmt = 0.35; a.shield = Math.max(a.shield, 70); a.shieldT = 3; } sim.ev({ k: 'pulse', x: p.x, y: p.y, wind: 1 }); },
+    e(sim, p) {
+      for (const t of sim.enemiesIn(p.x, p.y, 210, p.team)) { sim.damage(t, 28, p); const a = Math.atan2(t.y - p.y, t.x - p.x); t.dashT = 0.24; t.dvx = Math.cos(a) * 1100; t.dvy = Math.sin(a) * 1100; t.trail = false; t.dashHit = null; }
+      sim.ev({ k: 'pull', x: p.x, y: p.y, push: 1 });
+    },
+    r(sim, p) { sim.zones.push({ id: sim.nextId++, type: 'eye', x: p.x, y: p.y, r: 300, t: 5, T: 5, team: p.team, owner: p.id, heal: 32, ward: true }); },
+  },
+  egide: {
+    basic(sim, p) { meleeArc(sim, p, 130, 56, 1.05); sim.ev({ k: 'swing', id: p.id, a: p.aim }); },
+    q(sim, p) { p.dashT = 0.3; p.dvx = Math.cos(p.aim) * 1150; p.dvy = Math.sin(p.aim) * 1150; p.dashHit = { dmg: 50, stun: 0.7, stop: true, hit: new Set() }; },
+    e(sim, p) { for (const t of sim.enemiesIn(p.x, p.y, 280, p.team)) { t.tauntT = 1.5; t.tauntBy = p.id; } p.armorT = Math.max(p.armorT, 2); sim.ev({ k: 'taunt', id: p.id, x: p.x, y: p.y }); },
+    r(sim, p) { for (const a of sim.players) if (a.alive && a.team === p.team && dist(a.x, a.y, p.x, p.y) < 380 + a.r) { a.armorT = 4; a.shield = Math.max(a.shield, 120); a.shieldT = 4; } sim.ev({ k: 'aegis', x: p.x, y: p.y }); },
   },
 });
 
