@@ -6,6 +6,7 @@
 const WORLD_W = 2400, WORLD_H = 1600;
 const TICK = 1 / 60;
 const WIN_ROUNDS = 5;
+const BAN_TIME = 12, BAN_ROUNDS = 3;
 const SWAP_TIME = 8; // segundos entre rounds para trocar de caçador
 
 const TEAMS = [
@@ -150,52 +151,72 @@ const HUNTERS = {
       r: { nome: 'Correntes do Abismo', cd: 45, desc: 'Puxa todos os inimigos próximos para perto e os atordoa.' },
     },
   },
+  serra: {
+    nome: 'Serra', titulo: 'A Caçadora de Recompensas', classe: 'lutador',
+    hp: 470, speed: 226, r: 21,
+    cores: { pele: '#c99a7a', roupa: '#6b4a2f', roupa2: '#3a2818', detalhe: '#e0b050', cabelo: '#3a2a20', arma: '#4a4a52' },
+    lore: 'Jana Serra caça recompensas nas ilhas sem lei do Arquipélago Baixo. Ela nunca chega perto: um tiro, uma recompensa. O chapéu de aba larga esconde uma cicatriz de cada caçador que tentou pegá-la primeiro.',
+    habilidades: {
+      basico: { nome: 'Tiro Certeiro', cd: 0.85, desc: 'Tiro lento e de longo alcance que causa muito dano.' },
+      q: { nome: 'Bala Perfurante', cd: 8, desc: 'Um disparo potente que atravessa todos os inimigos em linha.' },
+      e: { nome: 'Recuo Tático', cd: 8, desc: 'Salta para trás e ganha velocidade por um instante.' },
+      r: { nome: 'Chuva de Balas', cd: 45, desc: 'Cobre uma área com tiros por 3s, ferindo e lentificando.' },
+    },
+  },
+  fera: {
+    nome: 'Fera', titulo: 'A Loba de Ônix', classe: 'iniciador',
+    hp: 540, speed: 250, r: 22,
+    cores: { pele: '#b88a6a', roupa: '#5a4a42', roupa2: '#2e2622', detalhe: '#ff6a3a', cabelo: '#d9d2c4', arma: '#e8e2d6' },
+    lore: 'Criada por lobos nas florestas de Ônix, Lua Fera fala pouco e ataca rápido. Veste a pele do lobo que a criou e luta como ele lutava: em saltos, sempre atrás do mais fraco do bando.',
+    habilidades: {
+      basico: { nome: 'Garras', cd: 0.42, desc: 'Arranhões rápidos de curta distância.' },
+      q: { nome: 'Bote', cd: 8, desc: 'Salta até a mira, ferindo e lentificando quem estiver na queda.' },
+      e: { nome: 'Rugido', cd: 10, desc: 'Fere e lentifica muito os inimigos em volta.' },
+      r: { nome: 'Frenesi', cd: 45, desc: 'Por 5s: ataques 2x mais rápidos, +25% de velocidade e roubo de vida.' },
+    },
+  },
+  duna: {
+    nome: 'Duna', titulo: 'O Senhor das Areias', classe: 'controlador',
+    hp: 480, speed: 226, r: 21,
+    cores: { pele: '#a8744f', roupa: '#d8b070', roupa2: '#8a6a3a', detalhe: '#3fb6a8', cabelo: '#2a2018', arma: '#c8a050' },
+    lore: 'Zahir Duna guardava a ampulheta do Deserto Flutuante, onde a areia cai para cima. Quando a Ruptura quebrou a ampulheta, a areia passou a obedecer a ele. Diz que tem todo o tempo do mundo, e que os inimigos não.',
+    habilidades: {
+      basico: { nome: 'Rajada de Areia', cd: 0.4, desc: 'Lança uma esfera de areia compactada.' },
+      q: { nome: 'Areia Movediça', cd: 9, desc: 'Cria uma área que lentifica muito os inimigos.' },
+      e: { nome: 'Duna', cd: 13, desc: 'Ergue uma longa muralha de areia que bloqueia tiros, passagem e visão.' },
+      r: { nome: 'Redemoinho', cd: 48, desc: 'Um redemoinho que puxa os inimigos para o centro e os fere.' },
+    },
+  },
+  elo: {
+    nome: 'Elo', titulo: 'O Tecelão de Vínculos', classe: 'protetor',
+    hp: 470, speed: 234, r: 21,
+    cores: { pele: '#e0c0a0', roupa: '#2f6a5a', roupa2: '#1a3a32', detalhe: '#9fffb0', cabelo: '#c0e0ff', arma: '#9fffb0' },
+    lore: 'Elo tece fios de Éter entre as pessoas. Dizem que nenhum esquadrão que ele acompanhou perdeu alguém para sempre: enquanto o fio não se rompe, ele puxa os caídos de volta.',
+    habilidades: {
+      basico: { nome: 'Fio de Éter', cd: 0.4, desc: 'Fere inimigos e cura aliados que atravessa.' },
+      q: { nome: 'Vínculo', cd: 10, desc: 'Liga-se ao aliado mais perto da mira: ele recebe 30% menos dano e se cura por 4s.' },
+      e: { nome: 'Pulso Restaurador', cd: 11, desc: 'Cura você e os aliados em volta.' },
+      r: { nome: 'Renascer', cd: 55, desc: 'Revive na hora o aliado caído mais perto da mira. Sem caídos, cura todo o time.' },
+    },
+  },
+  bisao: {
+    nome: 'Bisão', titulo: 'O Aríete das Planícies', classe: 'vanguarda',
+    hp: 800, speed: 212, r: 26, big: 1.16,
+    cores: { pele: '#7a5a44', roupa: '#6a3a2a', roupa2: '#3a2018', detalhe: '#e0c080', cabelo: '#4a3020', arma: '#8a6a4a' },
+    lore: 'Toro Bisão guiava manadas pelas planícies suspensas até que a terra rachou embaixo delas. Agora ele carrega o elmo de chifres do líder da manada e avança contra qualquer coisa que ameace os seus.',
+    habilidades: {
+      basico: { nome: 'Cabeçada', cd: 0.65, desc: 'Golpe em arco à frente.' },
+      q: { nome: 'Investida', cd: 9, desc: 'Avança com tudo e atordoa o primeiro inimigo atingido.' },
+      e: { nome: 'Couraça', cd: 12, desc: 'Por 3s: -40% de dano e imune a atordoar, prender e lentificar.' },
+      r: { nome: 'Estouro da Manada', cd: 45, desc: 'Três ondas de choque seguidas em volta de você.' },
+    },
+  },
 };
 const HUNTER_IDS = Object.keys(HUNTERS);
 const DASH_CD = 6;
 
-// ------------------------------------------------------------------
-//  MAPA — Arena de Vésper (espelhado no eixo X)
-// ------------------------------------------------------------------
-function buildMap() {
-  const half = [
-    { t: 'rect', k: 'ruin', x: 400, y: 500, w: 54, h: 150, hh: 70 },
-    { t: 'rect', k: 'ruin', x: 400, y: 950, w: 54, h: 150, hh: 70 },
-    { t: 'rect', k: 'ruin', x: 640, y: 290, w: 230, h: 52, hh: 64 },
-    { t: 'rect', k: 'ruin', x: 640, y: 1258, w: 230, h: 52, hh: 64 },
-    { t: 'circ', k: 'pillar', x: 720, y: 680, r: 38, hh: 120 },
-    { t: 'circ', k: 'pillar', x: 720, y: 920, r: 38, hh: 120 },
-    { t: 'rect', k: 'rock', x: 905, y: 500, w: 74, h: 66, hh: 56 },
-    { t: 'rect', k: 'rock', x: 905, y: 1034, w: 74, h: 66, hh: 56 },
-    { t: 'rect', k: 'ruin', x: 1010, y: 120, w: 60, h: 210, hh: 76 },
-    { t: 'rect', k: 'ruin', x: 1010, y: 1270, w: 60, h: 210, hh: 76 },
-    { t: 'circ', k: 'tree', x: 290, y: 250, r: 46, hh: 150 },
-    { t: 'circ', k: 'tree', x: 290, y: 1350, r: 46, hh: 150 },
-    { t: 'circ', k: 'tree', x: 560, y: 800, r: 40, hh: 140 },
-    { t: 'circ', k: 'tree', x: 820, y: 140, r: 42, hh: 140 },
-    { t: 'circ', k: 'tree', x: 820, y: 1460, r: 42, hh: 140 },
-    { t: 'rect', k: 'rock', x: 560, y: 1010, w: 60, h: 46, hh: 44 },
-    { t: 'rect', k: 'rock', x: 560, y: 545, w: 60, h: 46, hh: 44 },
-  ];
-  const center = [
-    { t: 'circ', k: 'crystal', x: 1200, y: 800, r: 64, hh: 190 },
-    { t: 'rect', k: 'ruin', x: 1140, y: 390, w: 120, h: 50, hh: 66 },
-    { t: 'rect', k: 'ruin', x: 1140, y: 1160, w: 120, h: 50, hh: 66 },
-    { t: 'circ', k: 'crystal', x: 1200, y: 170, r: 30, hh: 100 },
-    { t: 'circ', k: 'crystal', x: 1200, y: 1430, r: 30, hh: 100 },
-  ];
-  const obs = [];
-  for (const o of half) {
-    obs.push({ ...o });
-    const m = { ...o };
-    if (o.t === 'rect') m.x = WORLD_W - o.x - o.w; else m.x = WORLD_W - o.x;
-    obs.push(m);
-  }
-  for (const o of center) obs.push({ ...o });
-  obs.forEach((o, i) => { o.id = i; o.seed = (i * 9301 + 49297) % 233280; });
-  return obs;
-}
-const MAP_OBS = buildMap();
+// Os obstáculos do mapa atual (preenchido por setMap em maps.js)
+const MAP_OBS = [];
 
 // Ilha: retângulo arredondado com margem (a borda é o Abismo)
 const ISLAND = { x: 60, y: 60, w: WORLD_W - 120, h: WORLD_H - 120, r: 260 };

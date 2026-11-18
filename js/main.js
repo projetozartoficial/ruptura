@@ -7,6 +7,7 @@ const BOT_NAMES = ['Eco', 'Vulto', 'Faísca', 'Garoa', 'Breu', 'Ônix', 'Sina', 
 const ICONS = {
   brasa: ['✹', '✺', '➤', '☄'], corvo: ['➶', '⛓', '✧', '☾'], mare: ['◉', '◌', '▥', '≋'], lumi: ['✦', '⛉', '✚', '☀'], rocha: ['⚒', '⚡', '⛨', '⛰'],
   lamina: ['〉', '➹', '◈', '✵'], trovao: ['ϟ', '⇶', '⌁', '☈'], vinha: ['❦', '⚘', '✿', '♣'], sino: ['〰', '⇄', '◍', '♫'], ancora: ['⚓', '⥅', '⛊', '⛓'],
+  serra: ['⌖', '➼', '↶', '⁂'], fera: ['⚟', '⤴', '◎', '♨'], duna: ['∴', '◒', '▤', '꩜'], elo: ['∞', '⚭', '✚', '✶'], bisao: ['⚔', '⇛', '⛨', '⚑'],
 };
 const MODE_NAME = { training: 'Treino', standard: 'Partida padrão', ranked: 'Ranqueada' };
 
@@ -214,7 +215,7 @@ function hostOnLeave(pid) {
 function hostOnMsg(pid, m) {
   if (m.t === 'hello') {
     if (App.peers.has(pid)) return;
-    if (App.inGame) { App.tr.send(pid, { t: 'full', why: 'A partida já começou. Espere acabar.' }); return; }
+    if (App.inGame || App.draft) { App.tr.send(pid, { t: 'full', why: 'A partida já começou. Espere acabar.' }); return; }
     if (App.kind === 'ranked' && App.search && App.search.active) { App.tr.send(pid, { t: 'full', why: 'Esse grupo está na fila. Peça para cancelarem a busca.' }); return; }
     if (!m.uid) { App.tr.send(pid, { t: 'full', why: 'Só jogadores com conta conectada podem entrar.' }); return; }
     const id = App.nextPid++;
@@ -229,6 +230,8 @@ function hostOnMsg(pid, m) {
   const pe = App.peers.get(pid); if (!pe) return;
   if (m.t === 'in') { App.remoteIn.set(pe.id, m.i); return; }
   if (m.t === 'swap') { if (App.sim) App.sim.requestSwap(pe.id, m.hunter); return; }
+  if (m.t === 'ban') { if (App.sim) App.sim.requestBan(pe.id, m.hunter); return; }
+  if (m.t === 'veto') { draftVeto(pe.id, m.map); return; }
   if (!App.inGame) lobbyAction(pe.id, m);
 }
 function lobbyAction(id, m) {
@@ -381,12 +384,95 @@ function hostStart() {
   if (App.search) stopSearch(true);
   if (App.kind === 'ranked') Queue.cancel(App.code);
   const S = fillBots(App.slots);
-  if (App.role === 'host') App.tr.broadcast({ t: 'start', slots: S, mode, vsBots: !!App.vsBots });
-  beginGame(S, mode, !!App.vsBots);
+  startDraft(S, mode, !!App.vsBots);
+}
+
+// ------------------------------------------------------------------
+//  Veto de mapas: capitães banem alternado (A, B, A, B...) até sobrar 1
+// ------------------------------------------------------------------
+const VETO_TIME = 12;
+function captainOf(slots, team) { for (let i = team * 4; i < team * 4 + 4; i++) if (slots[i] && slots[i].kind === 'human') return slots[i].id; return null; }
+function startDraft(S, mode, vsBots) {
+  App.draftSlots = S; App.slots = S.map(s => ({ ...s }));
+  App.draft = { maps: MAP_DEFS.map(m => m.id), out: [], turn: 0, cap: [captainOf(S, 0), captainOf(S, 1)], end: Date.now() + VETO_TIME * 1000, done: null, mode, vsBots, t0: Date.now() };
+  clearInterval(App.draftIv);
+  App.draftIv = setInterval(draftTick, 250);
+  draftSync(); openDraft();
+}
+function draftLeft(D) { return D.maps.filter(m => !D.out.some(o => o.id === m)); }
+function draftSync() {
+  const D = App.draft; if (!D) return;
+  if (App.role === 'host') App.tr.broadcast({ t: 'draft', d: { out: D.out, turn: D.turn, cap: D.cap, done: D.done, left: Math.max(0, D.end - Date.now()) }, slots: App.slots });
+  renderDraft();
+}
+function draftTick() {
+  const D = App.draft; if (!D) { clearInterval(App.draftIv); return; }
+  if (App.role !== 'client') {
+    if (D.done) { if (Date.now() >= D.end) draftFinish(); }
+    else {
+      const cap = D.cap[D.turn], waited = Date.now() - (D.end - VETO_TIME * 1000);
+      if ((cap == null && waited > 1400) || Date.now() >= D.end) { const L = draftLeft(D); draftBan(L[(Math.random() * L.length) | 0]); }
+    }
+  }
+  renderDraftTimer();
+}
+function draftVeto(id, map) {
+  const D = App.draft; if (!D || D.done || D.cap[D.turn] !== id || !draftLeft(D).includes(map)) return;
+  draftBan(map);
+}
+function draftBan(map) {
+  const D = App.draft;
+  D.out.push({ id: map, team: D.turn }); D.turn ^= 1; D.end = Date.now() + VETO_TIME * 1000;
+  const L = draftLeft(D);
+  if (L.length === 1) { D.done = L[0]; D.end = Date.now() + 3200; }
+  SFX.play('block', 0);
+  draftSync();
+}
+function draftFinish() {
+  const D = App.draft; if (!D) return;
+  clearInterval(App.draftIv); App.draft = null;
+  const S = App.draftSlots;
+  if (App.role === 'host') App.tr.broadcast({ t: 'start', slots: S, mode: D.mode, vsBots: D.vsBots, map: D.done });
+  beginGame(S, D.mode, D.vsBots, D.done);
+}
+function myVeto(map) {
+  if (App.role === 'client') App.tr.send({ t: 'veto', map });
+  else draftVeto(App.myId, map);
+}
+function openDraft() { show('draft'); App.draftSig = ''; renderDraft(); }
+function renderDraftTimer() {
+  const D = App.draft, el = $('#draft-t'); if (!D || !el) return;
+  const t = Math.max(0, Math.ceil((D.end - Date.now()) / 1000));
+  el.textContent = D.done ? '' : t + 's';
+}
+function renderDraft() {
+  const D = App.draft; if (!D || App.screen !== 'draft') return;
+  const mi = slotOf(App.myId), myTeam = mi < 4 ? 0 : 1, capId = D.cap[D.turn];
+  const capSlot = App.slots.find(x => x.id === capId);
+  const meT = { id: App.myId, team: myTeam };
+  const capName = capSlot ? displayName({ id: capSlot.id, name: capSlot.name, hide: capSlot.hide, hunter: capSlot.hunter, team: D.turn }, meT) : 'bot';
+  const mine = capId === App.myId && !D.done;
+  const L = draftLeft(D);
+  let st;
+  if (D.done) st = `<b style="color:var(--gold)">Mapa escolhido: ${mapDef(D.done).nome}</b><small>${mapDef(D.done).dica}</small>`;
+  else st = `<b style="color:${TEAMS[D.turn].main}">Vez de ${TEAMS[D.turn].name}</b> — ${mine ? '<span style="color:var(--gold)">você é o capitão: clique num mapa para BANIR</span>' : `capitão: ${esc(capName)}`}<small>Ban ${D.out.length + 1} de ${MAP_DEFS.length - 1} · ${D.turn === myTeam ? 'seu time' : 'time adversário'} bane · sobra 1 mapa</small>`;
+  $('#draft-st').innerHTML = st + '<span id="draft-t" class="draft-t"></span>';
+  const box = $('#draft-maps'); box.innerHTML = '';
+  for (const id of D.maps) {
+    const m = mapDef(id), out = D.out.find(o => o.id === id), chosen = D.done === id;
+    const d = document.createElement('div');
+    d.className = 'dmap' + (out ? ' out' : '') + (chosen ? ' chosen' : '') + (mine && !out ? ' can' : '');
+    d.appendChild(mapPreview(id, 240));
+    d.insertAdjacentHTML('beforeend', `<div class="dm-i"><div class="dm-n">${m.nome}</div><div class="dm-t">${m.tag}</div><div class="dm-d">${m.desc}</div></div>${out ? `<div class="dm-x" style="color:${TEAMS[out.team].main}">BANIDO<small>${TEAMS[out.team].name}</small></div>` : ''}${chosen ? '<div class="dm-x ok">JOGAR AQUI</div>' : ''}`);
+    if (mine && !out) d.onclick = () => { SFX.init(); myVeto(id); };
+    box.appendChild(d);
+  }
+  renderDraftTimer();
 }
 function leaveRoom() {
   if (App.search) stopSearch(true);
   if (App.tr) { try { App.tr.close(); } catch (e) { } }
+  clearInterval(App.draftIv); App.draft = null;
   App.tr = null; App.role = 'none'; App.inGame = false; App.sim = null; App.cs = null; App.paused = false; App.expect = 0; App.vsBots = false;
   $('#pause').classList.remove('show');
   renderAcct();
@@ -421,7 +507,14 @@ function clientOnMsg(m) {
       App.tr = null; App.role = 'none';
       setTimeout(() => startJoin(m.code, { team: 1, kind: 'ranked' }), 900);
       break;
-    case 'start': beginGame(m.slots, m.mode || 'standard', !!m.vsBots); break;
+    case 'draft': {
+      const d = m.d; App.slots = m.slots;
+      App.draft = { maps: MAP_DEFS.map(x => x.id), out: d.out, turn: d.turn, cap: d.cap, done: d.done, end: Date.now() + d.left };
+      clearInterval(App.draftIv); App.draftIv = setInterval(draftTick, 250);
+      if (App.screen !== 'draft') openDraft(); else renderDraft();
+      break;
+    }
+    case 'start': clearInterval(App.draftIv); App.draft = null; beginGame(m.slots, m.mode || 'standard', !!m.vsBots, m.map); break;
     case 's':
       if (!App.cs) return;
       App.cs.apply(m, App.myId);
@@ -435,12 +528,13 @@ function clientOnClose() { if (App.role !== 'client' || App.moving) return; leav
 //  Partida
 // ------------------------------------------------------------------
 let hostLast = 0;
-function beginGame(slots, mode, vsBots) {
+function beginGame(slots, mode, vsBots, map) {
   App.slots = slots.map(s => ({ ...s }));
+  setMap(map || 'vesper'); App.map = CUR_MAP.id;
   App.matchMode = mode; App.vsBots = vsBots; App.expect = 0;
   App.inGame = true; App.ended = false; App.paused = false; App.pending = []; App.acc = 0; App.ticks = 0; hostLast = 0; App.recorded = null;
   if (App.role === 'client') { App.sim = null; App.cs = new ClientState(slots); }
-  else { App.sim = new Sim(slots, { mode }); App.cs = null; handleEvents(App.sim.drainEvents(), App.sim); }
+  else { App.sim = new Sim(slots, { mode, map: CUR_MAP.id }); App.cs = null; handleEvents(App.sim.drainEvents(), App.sim); }
   buildHud();
   show('game');
   R.parts = []; R.anim.clear();
@@ -543,10 +637,24 @@ function handleEvents(evs, S) {
       case 'round': {
         SFX.play('round', 0);
         const sub = (e.night ? 'NOITE · a visão vira um cone' : 'DIA · visão aberta');
-        flashBanner(e.ot ? 'PRORROGAÇÃO' : e.dec ? 'ROUND DECISIVO' : 'ROUND ' + e.n, e.ot || e.dec ? `Round ${e.n} · ${sub}` : sub, 2200);
+        flashBanner(e.ot ? 'PRORROGAÇÃO' : e.dec ? 'ROUND DECISIVO' : 'ROUND ' + e.n, e.n === 1 ? `${CUR_MAP.nome.toUpperCase()} · ${CUR_MAP.dica}` : e.ot || e.dec ? `Round ${e.n} · ${sub}` : sub, e.n === 1 ? 4200 : 2200);
         break;
       }
       case 'fight': flashBanner('LUTEM!', '', 900); SFX.play('tick', 0); break;
+      case 'bans': {
+        const [a, b] = e.b;
+        flashBanner('BANIDOS', `${HUNTERS[a].nome} (${TEAMS[0].name}) · ${HUNTERS[b].nome} (${TEAMS[1].name})`, 2600); SFX.play('block', 0);
+        feed(`Banidos no round ${e.n}: <b>${HUNTERS[a].nome}</b> e <b>${HUNTERS[b].nome}</b>`);
+        App.swapSig = '';
+        break;
+      }
+      case 'forced': if (e.id === me.id) feed(`Seu caçador foi banido — você agora é <b>${HUNTERS[e.h].nome}</b> (pode trocar agora)`); break;
+      case 'windwarn': flashBanner('RAJADA DE VENTO', e.dir > 0 ? 'o vento vai empurrar todos para o SUL ↓' : 'o vento vai empurrar todos para o NORTE ↑', 1600); SFX.play('tick', 0); break;
+      case 'wind': SFX.play('dash', 0); break;
+      case 'bellring': SFX.play('aurora', 0); flashBanner('O SINO TOCOU', e.team === me.team ? 'Seu time vê todos os inimigos por 5s' : 'Os inimigos estão vendo vocês por 5s!', 1800); break;
+      case 'pad': if (e.id === me.id) SFX.play('dash'); break;
+      case 'roar': case 'pulse': if (near(e.x, e.y)) SFX.play('aurora', 80); break;
+      case 'link': SFX.play('shield', 80); break;
       case 'swap': {
         const p = pl(e.id); if (!p) break;
         if (p.team === me.team) feed(`${nameTag(p, me)} trocou para <b style="color:${CLASSES[HUNTERS[e.h].classe].cor}">${HUNTERS[e.h].nome}</b>`);
@@ -633,26 +741,36 @@ function requestSwap(h) {
   if (App.role === 'client') App.tr.send({ t: 'swap', hunter: h });
   else if (App.sim) App.sim.requestSwap(App.myId, h);
 }
+function requestBan(h) {
+  if (App.role === 'client') App.tr.send({ t: 'ban', hunter: h });
+  else if (App.sim) App.sim.requestBan(App.myId, h);
+  App.myVote = h; App.swapSig = '';
+}
 function updateSwap(S, me) {
   const el = $('#swap');
-  const open = me && !App.ended && (S.phase === 'roundEnd' || S.phase === 'countdown') && App.screen === 'game';
-  el.classList.toggle('show', !!open);
-  if (!open) { App.swapSig = ''; return; }
-  const left = S.phase === 'roundEnd' ? S.phaseT + 3 : S.phaseT;
-  setText($('#swap-t'), 'swapt', `${Math.max(0, Math.ceil(left))}s · não repete no time`);
+  const ban = S.phase === 'ban';
+  const open = me && !App.ended && (S.phase === 'roundEnd' || S.phase === 'countdown' || ban) && App.screen === 'game';
+  el.classList.toggle('show', !!open); el.classList.toggle('banmode', !!(open && ban));
+  if (!open) { App.swapSig = ''; App.myVote = null; return; }
+  const bans = S.bans || [];
+  const left = S.phase === 'roundEnd' ? S.phaseT + (S.round < BAN_ROUNDS ? BAN_TIME + 5 : 3) : S.phaseT;
+  setText($('#swap-h-b'), 'swaphb', ban ? `Banimento · Round ${S.round}` : 'Trocar de caçador');
+  setText($('#swap-t'), 'swapt', ban ? `${Math.max(0, Math.ceil(left))}s · vote em quem banir — o banido sai para OS DOIS times` : `${Math.max(0, Math.ceil(left))}s · não repete no time${bans.length ? ' · banidos: ' + bans.map(h => HUNTERS[h].nome).join(', ') : ''}`);
   const used = new Set(S.players.filter(p => p.team === me.team && p.id !== me.id).map(p => p.hunter));
-  const sig = me.hunter + '|' + [...used].sort().join(',');
+  const tally = new Map(); if (ban && S.votes) for (const [id, h] of S.votes) { const p = S.players.find(q => q.id === id); if (p && p.team === me.team) tally.set(h, (tally.get(h) || 0) + 1); }
+  const myV = ban && S.votes && S.votes.get(me.id);
+  const sig = (ban ? 'B' : 'S') + me.hunter + '|' + [...used].sort().join(',') + '|' + bans.join(',') + '|' + [...tally].join(';') + '|' + myV;
   if (sig === App.swapSig) return;
   App.swapSig = sig;
   const L = $('#swap-list'); L.innerHTML = '';
   for (const h of HUNTER_IDS) {
-    const H = HUNTERS[h], C = CLASSES[H.classe];
+    const H = HUNTERS[h], C = CLASSES[H.classe], banned = bans.includes(h);
     const d = document.createElement('div');
-    d.className = 'sw' + (h === me.hunter ? ' cur' : '') + (used.has(h) ? ' taken' : '');
-    d.title = `${H.nome} — ${C.nome}`;
+    d.className = 'sw' + (!ban && h === me.hunter ? ' cur' : '') + (banned ? ' banned' : !ban && used.has(h) ? ' taken' : '') + (ban && myV === h ? ' vote' : '');
+    d.title = `${H.nome} — ${C.nome}` + (banned ? ' (banido)' : '');
     d.appendChild(portrait(h, 116));
-    d.insertAdjacentHTML('beforeend', `<span class="cl" style="color:${C.cor}">${C.icone}</span><span>${H.nome}</span>`);
-    d.onclick = () => { SFX.init(); requestSwap(h); };
+    d.insertAdjacentHTML('beforeend', `<span class="cl" style="color:${C.cor}">${C.icone}</span><span>${H.nome}</span>${tally.get(h) ? `<b class="vt">${tally.get(h)}</b>` : ''}${banned ? '<i class="bx">✕</i>' : ''}`);
+    if (!banned) d.onclick = () => { SFX.init(); SFX.play('click'); ban ? requestBan(h) : requestSwap(h); };
     L.appendChild(d);
   }
 }
@@ -686,6 +804,7 @@ function updateHud(S, me, dt) {
   setText(HUD.rd, 'rd', (ot ? 'PRORROGAÇÃO · ' : 'ROUND ') + S.round + (S.night ? ' · NOITE' : ' · DIA'));
   let tm;
   if (S.phase === 'countdown') tm = String(Math.ceil(S.phaseT));
+  else if (S.phase === 'ban') tm = 'BAN ' + Math.ceil(S.phaseT);
   else { const t = Math.floor(S.fightT); tm = Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); }
   setText(HUD.tm, 'tm', tm);
   if (S.phase === 'countdown' && S.phaseT < 3) {

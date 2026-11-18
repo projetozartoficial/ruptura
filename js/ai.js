@@ -5,12 +5,17 @@
 const NAV = (() => {
   const C = 40, GW = Math.ceil(WORLD_W / C), GH = Math.ceil(WORLD_H / C);
   const block = new Uint8Array(GW * GH);
-  for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
-    const x = gx * C + C / 2, y = gy * C + C / 2;
-    let b = !inIsland(x, y, 26);
-    if (!b) for (const o of MAP_OBS) if (pointInSolid(o, x, y, 28)) { b = true; break; }
-    block[gy * GW + gx] = b ? 1 : 0;
+  function rebuild() {
+    for (let gy = 0; gy < GH; gy++) for (let gx = 0; gx < GW; gx++) {
+      const x = gx * C + C / 2, y = gy * C + C / 2;
+      let b = !inIsland(x, y, 26);
+      if (!b) for (const o of MAP_OBS) if (pointInSolid(o, x, y, 28)) { b = true; break; }
+      if (!b) for (const f of FEATURES) if (f.f === 'lava' && inFeature(f, x, y, 26)) { b = true; break; }
+      block[gy * GW + gx] = b ? 1 : 0;
+    }
   }
+  rebuild();
+  mapHooks.push(rebuild);
   function cell(x, y) { return [clamp(Math.floor(x / C), 0, GW - 1), clamp(Math.floor(y / C), 0, GH - 1)]; }
   function nearestFree(gx, gy) {
     if (!block[gy * GW + gx]) return [gx, gy];
@@ -56,13 +61,14 @@ const NAV = (() => {
     pts.push({ x: tx, y: ty });
     return pts;
   }
-  return { path, C };
+  return { path, C, rebuild };
 })();
 
 function clearLine(sim, ax, ay, bx, by, r) {
   const d = dist(ax, ay, bx, by); if (d < 1) return true;
   const ux = (bx - ax) / d, uy = (by - ay) / d, px = -uy * r, py = ux * r;
-  for (const s of [0, 1, -1]) if (castRay(sim.solids, ax + px * s, ay + py * s, ux, uy, d) < d - 1) return false;
+  for (const s of [0, 1, -1]) if (castRay(sim.solids, ax + px * s, ay + py * s, ux, uy, d, true) < d - 1) return false;
+  for (const f of FEATURES) if (f.f === 'lava') for (let t = 0; t <= 1; t += 0.1) if (inFeature(f, ax + (bx - ax) * t, ay + (by - ay) * t, r)) return false;
   return true;
 }
 
@@ -77,9 +83,14 @@ const ROLE = {
   vinha: { range: 560, aggro: 0.5 },
   sino: { range: 420, aggro: 0.4 },
   ancora: { range: 180, aggro: 1.0 },
+  serra: { range: 680, aggro: 0.4 },
+  fera: { range: 90, aggro: 1.0 },
+  duna: { range: 560, aggro: 0.5 },
+  elo: { range: 450, aggro: 0.4 },
+  bisao: { range: 110, aggro: 1.0 },
 };
-const PROJ_SPEED = { brasa: 960, corvo: 1150, mare: 760, lumi: 980, rocha: 9999, lamina: 950, trovao: 1050, vinha: 850, sino: 850, ancora: 900 };
-const MELEE = { rocha: 1, ancora: 1, lamina: 1 };
+const PROJ_SPEED = { brasa: 960, corvo: 1150, mare: 760, lumi: 980, rocha: 9999, lamina: 950, trovao: 1050, vinha: 850, sino: 850, ancora: 900, serra: 1700, fera: 9999, duna: 820, elo: 900, bisao: 9999 };
+const MELEE = { rocha: 1, ancora: 1, lamina: 1, fera: 1, bisao: 1 };
 
 function botThink(sim, p, dt) {
   const inp = p.input;
@@ -129,7 +140,9 @@ function botThink(sim, p, dt) {
   } else if (deadAllies.length && !outStorm) {
     const da = deadAllies.reduce((m, a) => dist(p.x, p.y, a.soulX, a.soulY) < dist(p.x, p.y, m.soulX, m.soulY) ? a : m, deadAllies[0]);
     if (dist(p.x, p.y, da.soulX, da.soulY) > 40) goal = { x: da.soulX, y: da.soulY };
-  } else if (B.lastSeen && sim.time - B.lastSeen.t < 6) goal = { x: B.lastSeen.x, y: B.lastSeen.y };
+  } else if (hpF < 0.55 && FEATURES.some(f => f.f === 'fountain')) { const f = FEATURES.find(f => f.f === 'fountain'); goal = { x: f.x, y: f.y }; }
+  else if (FEATURES.some(f => f.f === 'bell') && sim.bell.cd <= 0 && p.slot % 4 < 2) { const f = FEATURES.find(f => f.f === 'bell'); goal = { x: f.x + (p.slot % 2 ? 30 : -30), y: f.y }; }
+  else if (B.lastSeen && sim.time - B.lastSeen.t < 6) goal = { x: B.lastSeen.x, y: B.lastSeen.y };
   else {
     // avança em grupo rumo ao centro / lado inimigo
     const ex = p.team === 0 ? 1550 : 850;
@@ -181,7 +194,7 @@ function botThink(sim, p, dt) {
   if (!los) return;
   if (B.reactT <= 0 && !B.engaged) { B.reactT = rnd(0.15, 0.35); B.engaged = true; return; }
 
-  const range = { brasa: 740, corvo: 640, mare: 680, lumi: 700, rocha: 150, lamina: 320, trovao: 590, vinha: 660, sino: 500, ancora: 270 }[p.hunter];
+  const range = { brasa: 740, corvo: 640, mare: 680, lumi: 700, rocha: 150, lamina: 320, trovao: 590, vinha: 660, sino: 500, ancora: 270, serra: 940, fera: 140, duna: 660, elo: 640, bisao: 150 }[p.hunter];
   if (d < range) inp.fire = true;
   const nearE = sim.players.filter(e => e.team !== p.team && e.alive && dist(e.x, e.y, target.x, target.y) < 220).length;
 
@@ -234,6 +247,34 @@ function botThink(sim, p, dt) {
       if (allies.concat([p]).filter(a => a.hp / a.maxHp < 0.6).length >= 2) inp.r = true;
       break;
     }
+    case 'serra':
+      if (d < 950) inp.q = true;
+      if (d < 260) inp.e = true;
+      if (d < 740 && (nearE >= 2 || target.hp < 200)) { inp.r = true; inp.ax = target.x; inp.ay = target.y; }
+      break;
+    case 'fera':
+      if (d < 440 && d > 140) inp.q = true;
+      if (d < 220) inp.e = true;
+      if (d < 260 && hpF > 0.3) inp.r = true;
+      break;
+    case 'duna':
+      if (d < 620) inp.q = true;
+      if (hpF < 0.55 && d < 430) inp.e = true;
+      if (d < 640 && nearE >= 2) inp.r = true;
+      break;
+    case 'elo': {
+      const hurt = allies.filter(a => a.hp / a.maxHp < 0.65 && dist(a.x, a.y, p.x, p.y) < 600).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp);
+      if (hurt.length && p.cd.q <= 0) { inp.ax = hurt[0].x; inp.ay = hurt[0].y; inp.q = true; inp.fire = false; }
+      if (allies.concat([p]).some(a => a.hp / a.maxHp < 0.55 && dist(a.x, a.y, p.x, p.y) < 230)) inp.e = true;
+      const dead = sim.players.find(a => !a.alive && a.team === p.team && dist(a.soulX, a.soulY, p.x, p.y) < 700);
+      if (dead && p.cd.r <= 0) { inp.ax = dead.soulX; inp.ay = dead.soulY; inp.r = true; inp.fire = false; }
+      break;
+    }
+    case 'bisao':
+      if (d < 450 && d > 120) inp.q = true;
+      if (hpF < 0.65 && d < 400) inp.e = true;
+      if (d < 240 && (nearE >= 2 || hpF > 0.4)) inp.r = true;
+      break;
     case 'ancora':
       if (d < 560 && d > 150) inp.q = true;
       if (hpF < 0.7 && d < 500) inp.e = true;

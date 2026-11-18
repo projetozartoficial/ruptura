@@ -214,20 +214,22 @@ const Transport = {
 // ------------------------------------------------------------------
 //  Codificação dos snapshots
 // ------------------------------------------------------------------
-const PKINDS = ['ember', 'dagger', 'orb', 'light', 'fireball', 'hook', 'fissure', 'wave', 'wind', 'bolt', 'thorn', 'roots', 'sound', 'anchor', 'grapple'];
-const ZKINDS = ['fire', 'burn', 'pool', 'sanct', 'static', 'strike', 'seed', 'grove'];
+const PKINDS = ['ember', 'dagger', 'orb', 'light', 'fireball', 'hook', 'fissure', 'wave', 'wind', 'bolt', 'thorn', 'roots', 'sound', 'anchor', 'grapple', 'bullet', 'pierce', 'sandbolt', 'thread'];
+const ZKINDS = ['fire', 'burn', 'pool', 'sanct', 'static', 'strike', 'seed', 'grove', 'barrage', 'quicksand', 'vortex', 'geyser'];
 const r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
 
 function encodeSnap(sim, events) {
   return {
     t: 's', ph: sim.phase, pt: r2(sim.phaseT), rd: sim.round, sc: sim.score, ng: sim.night ? 1 : 0, ft: r2(sim.fightT), st: Math.round(sim.storm.r), w: sim.winner,
     P: sim.players.map(p => [p.id, r1(p.x), r1(p.y), r2(p.aim), Math.round(p.hp), Math.round(p.shield), p.alive ? 1 : 0,
-      (p.slowT > 0 ? 1 : 0) | (p.huntT > 0 ? 2 : 0) | (p.bastionT > 0 ? 4 : 0) | (p.spdT > 0 ? 8 : 0) | (p.invuln > 0 ? 16 : 0) | (p.leap ? 32 : 0) | (p.dashT > 0 ? 64 : 0) | (p.rootT > 0 ? 128 : 0) | (p.parryT > 0 ? 256 : 0) | (p.wardT > 0 ? 512 : 0) | (p.spinT > 0 ? 1024 : 0),
+      (p.slowT > 0 ? 1 : 0) | (p.huntT > 0 ? 2 : 0) | (p.bastionT > 0 ? 4 : 0) | (p.spdT > 0 ? 8 : 0) | (p.invuln > 0 ? 16 : 0) | (p.leap ? 32 : 0) | (p.dashT > 0 ? 64 : 0) | (p.rootT > 0 ? 128 : 0) | (p.parryT > 0 ? 256 : 0) | (p.wardT > 0 ? 512 : 0) | (p.spinT > 0 ? 1024 : 0) | (p.linkT > 0 ? 2048 : 0) | (p.armorT > 0 ? 4096 : 0) | (p.frenzyT > 0 ? 8192 : 0) | (p.revealT > 0 ? 16384 : 0),
       Math.round(p.z), r2(p.stun), r1(p.cd.q), r1(p.cd.e), r1(p.cd.r), r1(p.cd.dash), r2(p.cd.basic),
-      p.kills, p.deaths, Math.round(p.dmg), Math.round(p.heal), r2(p.revive), Math.round(p.soulX), Math.round(p.soulY), Math.round(p.vx), Math.round(p.vy), HUNTER_IDS.indexOf(p.hunter)]),
+      p.kills, p.deaths, Math.round(p.dmg), Math.round(p.heal), r2(p.revive), Math.round(p.soulX), Math.round(p.soulY), Math.round(p.vx), Math.round(p.vy), HUNTER_IDS.indexOf(p.hunter), p.linkBy || 0]),
     J: sim.projectiles.map(pr => [pr.id, PKINDS.indexOf(pr.kind), r1(pr.x), r1(pr.y), Math.round(pr.vx), Math.round(pr.vy), pr.team, pr.owner, Math.round(pr.trav)]),
     Z: sim.zones.map(z => [z.id, ZKINDS.indexOf(z.type), Math.round(z.x), Math.round(z.y), z.r, r2(z.t), z.T, z.team]),
-    L: sim.walls.map(w => [w.id, r1(w.x), r1(w.y), w.r, r2(w.life), w.T]),
+    L: sim.walls.map(w => [w.id, r1(w.x), r1(w.y), w.r, r2(w.life), w.T, w.k === 'sand' ? 1 : 0]),
+    bn: sim.bans, bv: [...sim.votes],
+    mp: sim.map, rv: [r1(sim.reveal[0]), r1(sim.reveal[1])], bl: [r2(sim.bell.p[0]), r2(sim.bell.p[1]), Math.round(sim.bell.cd)], wd: [sim.wind.on > 0 ? 1 : 0, sim.wind.warn ? 1 : 0, sim.wind.dir],
     E: events,
   };
 }
@@ -243,7 +245,7 @@ class ClientState {
         x: 0, y: 0, tx: 0, ty: 0, aim: 0, hp: H.hp, shield: 0, alive: true, z: 0, stun: 0, cd: { q: 0, e: 0, r: 0, dash: 0, basic: 0 },
         kills: 0, deaths: 0, dmg: 0, heal: 0, revive: 0, soulX: 0, soulY: 0, vx: 0, vy: 0, slowT: 0, huntT: 0, bastionT: 0, spdT: 0, invuln: 0, leap: null, init: false });
     });
-    this.projectiles = []; this.zones = []; this.walls = [];
+    this.projectiles = []; this.zones = []; this.walls = []; this.bans = []; this.votes = new Map();
     this.phase = 'countdown'; this.phaseT = 3; this.round = 1; this.score = [0, 0]; this.night = false; this.fightT = 0;
     this.storm = { x: WORLD_W / 2, y: WORLD_H / 2, r: 1500 }; this.winner = -1;
     this.snapT = 0;
@@ -262,16 +264,20 @@ class ClientState {
       if (p.id !== myId) p.aim = a[3];
       p.hp = a[4]; p.shield = a[5]; p.alive = !!a[6];
       const f = a[7];
-      p.slowT = f & 1 ? 1 : 0; p.huntT = f & 2 ? 1 : 0; p.bastionT = f & 4 ? 1 : 0; p.spdT = f & 8 ? 1 : 0; p.invuln = f & 16 ? 1 : 0; p.leap = f & 32 ? {} : null; p.dashing = !!(f & 64); p.rootT = f & 128 ? 1 : 0; p.parryT = f & 256 ? 1 : 0; p.wardT = f & 512 ? 1 : 0; p.spinT = f & 1024 ? 1 : 0;
+      p.slowT = f & 1 ? 1 : 0; p.huntT = f & 2 ? 1 : 0; p.bastionT = f & 4 ? 1 : 0; p.spdT = f & 8 ? 1 : 0; p.invuln = f & 16 ? 1 : 0; p.leap = f & 32 ? {} : null; p.dashing = !!(f & 64); p.rootT = f & 128 ? 1 : 0; p.parryT = f & 256 ? 1 : 0; p.wardT = f & 512 ? 1 : 0; p.spinT = f & 1024 ? 1 : 0; p.linkT = f & 2048 ? 1 : 0; p.armorT = f & 4096 ? 1 : 0; p.frenzyT = f & 8192 ? 1 : 0; p.revealT = f & 16384 ? 1 : 0;
       p.z = a[8]; p.stun = a[9];
       p.cd = { q: a[10], e: a[11], r: a[12], dash: a[13], basic: a[14] };
       p.kills = a[15]; p.deaths = a[16]; p.dmg = a[17]; p.heal = a[18]; p.revive = a[19]; p.soulX = a[20]; p.soulY = a[21]; p.vx = a[22]; p.vy = a[23];
+      p.linkBy = a[25];
       const hid = HUNTER_IDS[a[24]]; if (hid && hid !== p.hunter) { p.hunter = hid; p.maxHp = HUNTERS[hid].hp; p.r = HUNTERS[hid].r; }
     }
     this.snapT = performance.now();
     this.projectiles = s.J.map(j => ({ id: j[0], kind: PKINDS[j[1]], sx: j[2], sy: j[3], x: j[2], y: j[3], vx: j[4], vy: j[5], team: j[6], owner: j[7], trav0: j[8], trav: j[8] }));
     this.zones = s.Z.map(z => ({ id: z[0], type: ZKINDS[z[1]], x: z[2], y: z[3], r: z[4], t: z[5], T: z[6], team: z[7] }));
-    this.walls = s.L.map(w => ({ t: 'circ', k: 'ice', id: w[0], x: w[1], y: w[2], r: w[3], life: w[4], T: w[5] }));
+    if (s.mp && s.mp !== CUR_MAP.id) setMap(s.mp);
+    this.bans = s.bn || []; this.votes = new Map(s.bv || []);
+    this.reveal = s.rv || [0, 0]; this.bell = s.bl; this.wind = s.wd;
+    this.walls = s.L.map(w => ({ t: 'circ', k: w[6] ? 'sand' : 'ice', id: w[0], x: w[1], y: w[2], r: w[3], life: w[4], T: w[5] }));
   }
   // interpolação: desenha os outros jogadores ~80ms no passado, entre dois snapshots reais
   tick(dt, me, pred, smooth) {
