@@ -153,7 +153,7 @@ async function startHost(kind) {
   msg('#menu-msg', 'Criando sala...');
   const code = genCode();
   try { App.tr = await Transport.host(App.net, code, { onJoin: () => { }, onLeave: hostOnLeave, onMsg: hostOnMsg }); }
-  catch (e) { return msg('#menu-msg', e.message + (App.net === 'online' ? ' — o modo online funciona no site hospedado (GitHub Pages).' : '')); }
+  catch (e) { return msg('#menu-msg', e.message); }
   msg('#menu-msg', '');
   App.role = 'host'; App.kind = kind; App.code = code; App.myId = 1; App.slots = emptySlots(); App.peers.clear(); App.nextPid = 2;
   App.slots[0] = Object.assign({ kind: 'human', id: 1, name: App.name, hunter: App.myHunter }, mySlotInfo());
@@ -178,7 +178,7 @@ async function startJoin(codeArg, hint) {
   if (App.net === 'online' && !hasWebRTC()) return msg('#menu-msg', 'Este navegador bloqueia conexões online. Use o modo Local ou abra o site hospedado.');
   msg('#menu-msg', 'Conectando...');
   try { App.tr = await Transport.join(App.net, code, { onMsg: clientOnMsg, onClose: clientOnClose }); }
-  catch (e) { App.moving = false; show('menu'); return msg('#menu-msg', e.message + (App.net === 'online' ? ' — o modo online funciona no site hospedado (GitHub Pages).' : '')); }
+  catch (e) { App.moving = false; show('menu'); return msg('#menu-msg', e.message); }
   msg('#menu-msg', '');
   App.moving = false;
   App.role = 'client'; App.code = code; App.myId = 0; App.kind = hint && hint.kind || 'standard';
