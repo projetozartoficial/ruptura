@@ -7,8 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="icon" type="image/svg+xml" href="logo.svg?v=8">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="icon" type="image/svg+xml" href="logo.svg?v=10">
+<link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 <canvas id="bg"></canvas>
@@ -17,36 +17,31 @@
 <section id="scr-menu" class="screen active">
   <div class="menu-wrap">
     <div class="logo">
-      <img class="logo-emblem" src="logo.svg?v=8" alt="" width="110" height="110" style="width:110px;height:110px">
+      <img class="logo-emblem" src="logo.svg?v=10" alt="" width="110" height="110" style="width:110px;height:110px">
       <h1>RUPTURA</h1>
       <h2>Caçadores do Abismo</h2>
     </div>
     <div class="menu-box">
       <div id="acct" class="acct"></div>
-      <button id="login-gate" class="btn big gbtn" data-act="login" style="justify-content:center"><b style="color:#4285f4;font-size:20px">G</b> Entrar com Google para jogar</button>
-      <button class="btn big" data-act="solo">▶ Treino contra bots</button>
-      <button class="btn big" data-act="host">⚔ Partida padrão com amigos</button>
-      <button id="btn-ranked" class="btn big gold" data-act="ranked">✦ Ranqueada · Arena 4v4</button>
-      <div class="row">
+      <button id="login-gate" class="btn big gbtn" data-act="login"><b style="color:#4285f4;font-size:20px">G</b> Entrar com Google para jogar</button>
+      <button class="btn big" data-act="solo"><span class="mi">▶</span> Treino contra bots</button>
+      <button class="btn big" data-act="host"><span class="mi">⚔</span> Partida padrão</button>
+      <button id="btn-ranked" class="btn big gold" data-act="ranked"><span class="mi">✦</span> Ranqueada</button>
+      <div class="row join">
         <input id="in-code" maxlength="5" placeholder="CÓDIGO" autocomplete="off">
         <button class="btn" data-act="join">Entrar na sala</button>
       </div>
-      <div class="row small">
-        <span class="lbl">Conexão:</span>
-        <label class="radio"><input type="radio" name="net" value="online" checked> Online (internet)</label>
-        <label class="radio"><input type="radio" name="net" value="local"> Local (abas do mesmo PC)</label>
-      </div>
-      <div class="row">
+      <div class="menu-grid">
         <button class="btn ghost" data-act="friends">Amigos<span id="fr-badge" class="badge"></span></button>
         <button class="btn ghost" data-act="profile">Perfil</button>
         <button class="btn ghost" data-act="codex">Caçadores</button>
-        <button class="btn ghost" data-act="howto">Como jogar</button>
-        <button class="btn ghost" data-act="settings">⚙</button>
+        <button class="btn ghost" data-act="howto">Ajuda</button>
+        <button class="btn ghost" data-act="settings" title="Configurações">⚙</button>
       </div>
       <p id="menu-msg" class="msg"></p>
     </div>
   </div>
-  <div class="ver">v0.5 · Arena 4v4 · Arena de Vésper</div>
+  <div class="ver">v0.6 · Arena 4v4 · Arena de Vésper</div>
 </section>
 
 <!-- ============ LOBBY ============ -->
@@ -123,20 +118,6 @@
   </div>
 </section>
 
-<!-- ============ CONFIGURAÇÕES ============ -->
-<section id="scr-settings" class="screen">
-  <div class="codex narrow">
-    <header><h2>Configurações</h2><button class="btn ghost" data-act="back">Voltar</button></header>
-    <div class="set-row"><span>Qualidade gráfica</span>
-      <div class="seg" id="set-quality">
-        <button data-q="auto">Auto</button><button data-q="alta">Alta</button><button data-q="media">Média</button><button data-q="baixa">Baixa</button>
-      </div></div>
-    <p class="hint">Se o jogo estiver travando, use Média ou Baixa. No Auto, o jogo baixa a qualidade sozinho quando o PC sofre.</p>
-    <div class="set-row"><span>Mostrar FPS</span><label class="switch"><input type="checkbox" id="set-fps"><i></i></label></div>
-    <div class="set-row"><span>Som</span><label class="switch"><input type="checkbox" id="set-sound" checked><i></i></label></div>
-  </div>
-</section>
-
 <!-- ============ FIM ============ -->
 <section id="scr-end" class="screen">
   <div class="end">
@@ -185,7 +166,7 @@
     <div class="pause-box">
       <h2>Pausa</h2>
       <button class="btn" data-act="resume">Continuar</button>
-      <button class="btn" data-act="sound">Som: ligado</button>
+      <button class="btn" data-act="settings">Configurações</button>
       <button class="btn ghost" data-act="quit">Sair da partida</button>
     </div>
   </div>
@@ -208,6 +189,17 @@
   </div>
 </div>
 
+<!-- ============ CONFIGURAÇÕES ============ -->
+<div id="set-modal" class="modal">
+  <div class="modal-box set-box">
+    <header class="set-head"><h2>Configurações</h2><button class="btn ghost" data-act="setclose">✕</button></header>
+    <div class="tabs" id="set-tabs">
+      <button data-tab="video">Vídeo</button><button data-tab="audio">Áudio</button><button data-tab="controls">Controles</button><button data-tab="game">Jogo</button>
+    </div>
+    <div id="set-body" class="set-body"></div>
+  </div>
+</div>
+
 <!-- ============ AMIGOS ============ -->
 <aside id="friends" class="friends">
   <header><h3>Amigos</h3><button class="btn ghost" data-act="friendsclose">✕</button></header>
@@ -218,14 +210,15 @@
 </aside>
 <div id="toasts" class="toasts"></div>
 
-<script src="js/data.js?v=8"></script>
-<script src="js/sim.js?v=8"></script>
-<script src="js/ai.js?v=8"></script>
-<script src="js/render.js?v=8"></script>
-<script src="js/audio.js?v=8"></script>
-<script src="js/net.js?v=8"></script>
-<script src="js/firebase-config.js?v=8"></script>
-<script src="js/account.js?v=8"></script>
-<script src="js/main.js?v=8"></script>
+<script src="js/data.js?v=10"></script>
+<script src="js/sim.js?v=10"></script>
+<script src="js/ai.js?v=10"></script>
+<script src="js/render.js?v=10"></script>
+<script src="js/audio.js?v=10"></script>
+<script src="js/net.js?v=10"></script>
+<script src="js/settings.js?v=10"></script>
+<script src="js/firebase-config.js?v=10"></script>
+<script src="js/account.js?v=10"></script>
+<script src="js/main.js?v=10"></script>
 </body>
 </html>

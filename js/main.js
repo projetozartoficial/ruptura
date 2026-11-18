@@ -16,9 +16,6 @@ const App = {
   inGame: false, paused: false, ended: false, matchMode: 'standard', demo: null, demoMe: null, demoT: 0,
   search: null, expect: 0, moving: false,
 };
-const Settings = { quality: 'auto', fps: false, sound: true };
-try { Object.assign(Settings, JSON.parse(localStorage.getItem('ruptura-settings') || '{}')); } catch (e) { }
-function saveSettings() { try { localStorage.setItem('ruptura-settings', JSON.stringify(Settings)); } catch (e) { } }
 
 // ------------------------------------------------------------------
 //  Canvas / renderer / qualidade
@@ -35,6 +32,9 @@ function resize() { canvas.width = Math.floor(innerWidth * R.dpr); canvas.height
 addEventListener('resize', resize);
 applyQuality(curQ);
 if (!Settings.sound) SFX.toggle();
+SFX.setVolume(Settings.volume / 100);
+function applyGameplaySettings() { R.shakeOn = Settings.shake; R.dmgNumbers = Settings.dmgNumbers; R.names = Settings.names; R.lookahead = Settings.lookahead; }
+applyGameplaySettings();
 
 const perf = { acc: 0, n: 0, fps: 60 };
 function trackPerf(raw) {
@@ -77,7 +77,7 @@ document.addEventListener('click', e => {
   ({
     solo: () => startSolo(), host: () => startHost('standard'), ranked: () => startRankedParty(), join: () => startJoin(),
     codex: () => { buildCodex(); show('codex'); }, howto: () => show('howto'), back: () => show('menu'),
-    profile: () => { buildProfile(); show('profile'); }, settings: () => { buildSettings(); show('settings'); },
+    profile: () => { buildProfile(); show('profile'); }, settings: () => openSettings(), setclose: () => closeSettings(),
     leave: () => leaveRoom(), start: () => hostStart(), menu: () => leaveRoom(), again: () => playAgain(),
     resume: () => togglePause(false), quit: () => leaveRoom(),
     login: () => doLogin(), logout: () => Account.logout(),
@@ -88,7 +88,6 @@ document.addEventListener('click', e => {
     frremove: () => { const f = Account.friends.find(x => x.req === b.dataset.id); if (f) Account.removeFriend(f); },
     frjoin: () => joinFriendRoom(b.dataset.code), frinvite: () => inviteFriend(b.dataset.uid, b),
     invjoin: () => acceptInvite(b.dataset.id), invclose: () => { const i = Account.invites.find(x => x.id === b.dataset.id); if (i) Account.dropInvite(i); },
-    sound: () => { const on = SFX.toggle(); Settings.sound = on; saveSettings(); b.textContent = 'Som: ' + (on ? 'ligado' : 'desligado'); },
   })[b.dataset.act]?.();
 });
 
@@ -120,7 +119,7 @@ function renderAcct() {
 
 function readName() {
   App.name = Account.profile ? Account.profile.name : 'Caçador';
-  App.net = document.querySelector('input[name=net]:checked').value;
+  App.net = Settings.net || 'online';
 }
 function mySlotInfo() { const s = Account.summary(); return { uid: s.uid, tag: s.tag, lvl: s.level, rank: s.rank, mmr: s.mmr, pl: s.placements }; }
 
@@ -450,39 +449,56 @@ function meP(S) { return S.players.find(p => p.id === App.myId); }
 // ------------------------------------------------------------------
 //  Entrada
 // ------------------------------------------------------------------
-const keys = {}; const mouse = { sx: 0, sy: 0, wx: 0, wy: 0, l: false, r: false };
+const mouse = { sx: 0, sy: 0, wx: 0, wy: 0 };
+let binding = null; // { action, slot } enquanto espera uma tecla nova
+function finishBind(code) { if (!binding) return; setBind(binding.action, binding.slot, code); binding = null; renderSettings(); buildHudLabels(); }
 addEventListener('keydown', e => {
+  if (binding) {
+    e.preventDefault(); e.stopPropagation();
+    if (e.code === 'Escape') { binding = null; renderSettings(); }
+    else finishBind(e.code === 'Backspace' || e.code === 'Delete' ? '' : e.code);
+    return;
+  }
   if (e.target.tagName === 'INPUT') {
     if (e.key === 'Enter' && e.target.id === 'in-code') startJoin();
     if (e.key === 'Enter' && (e.target.id === 'nk-name' || e.target.id === 'nk-tag')) confirmNick();
     return;
   }
-  const k = e.key.toLowerCase(); keys[k] = true;
+  if (e.code === 'Escape' && $('#set-modal').classList.contains('show')) { closeSettings(); return; }
+  Down.add(e.code);
   if (App.screen === 'game') {
-    if (k === 'tab') { e.preventDefault(); $('#tabboard').classList.add('show'); buildTab(); }
-    if (k === 'escape') togglePause();
-    if (k === 'm') { const on = SFX.toggle(); Settings.sound = on; saveSettings(); flashBanner(on ? 'Som ligado' : 'Som desligado', '', 800); }
-    if (k === 'f3' || k === 'f') { e.preventDefault(); Settings.fps = !Settings.fps; saveSettings(); }
-    if (k === ' ') e.preventDefault();
+    const a = actionOf(e.code);
+    if (['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code) || a) e.preventDefault();
+    if (a === 'score') { $('#tabboard').classList.add('show'); buildTab(); }
+    if (a === 'fps' && !e.repeat) { Settings.fps = !Settings.fps; saveSettings(); }
+    if (e.code === 'Escape') togglePause();
+    if (e.code === 'KeyM' && !a) { const on = SFX.toggle(); Settings.sound = on; saveSettings(); flashBanner(on ? 'Som ligado' : 'Som desligado', '', 800); }
   }
-});
-addEventListener('keyup', e => { const k = e.key.toLowerCase(); keys[k] = false; if (k === 'tab') $('#tabboard').classList.remove('show'); });
-addEventListener('blur', () => { for (const k in keys) keys[k] = false; mouse.l = mouse.r = false; });
+}, true);
+addEventListener('keyup', e => { Down.delete(e.code); if (actionOf(e.code) === 'score') $('#tabboard').classList.remove('show'); });
+addEventListener('blur', () => Down.clear());
 $('#scr-game').addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('contextmenu', e => { if (binding) e.preventDefault(); });
 addEventListener('mousemove', e => { mouse.cx = e.clientX; mouse.cy = e.clientY; });
-$('#scr-game').addEventListener('mousedown', e => { SFX.init(); if (e.target.closest('#swap')) return; if (e.button === 0) mouse.l = true; if (e.button === 2) mouse.r = true; });
-addEventListener('mouseup', e => { if (e.button === 0) mouse.l = false; if (e.button === 2) mouse.r = false; });
-function togglePause(v) { App.paused = v ?? !App.paused; $('#pause').classList.toggle('show', App.paused); }
+addEventListener('mousedown', e => {
+  if (binding && e.target.closest('.kb.wait')) { e.preventDefault(); finishBind('Mouse' + e.button); return; }
+  if (App.screen !== 'game' || App.paused || e.target.closest('#swap,#pause,.modal,#friends')) return;
+  SFX.init(); Down.add('Mouse' + e.button);
+  if (e.button === 1) e.preventDefault();
+}, true);
+addEventListener('mouseup', e => Down.delete('Mouse' + e.button));
+function togglePause(v) { App.paused = v ?? !App.paused; $('#pause').classList.toggle('show', App.paused); if (App.paused) Down.clear(); }
 function readInput() {
   const z = R.cam.z || 1;
   mouse.sx = (mouse.cx || 0) * R.dpr; mouse.sy = (mouse.cy || 0) * R.dpr;
   mouse.wx = R.cam.x + (mouse.sx - canvas.width / 2) / z;
   mouse.wy = R.cam.y + (mouse.sy - canvas.height / 2) / z;
-  const b = App.paused;
+  const b = App.paused || $('#set-modal').classList.contains('show');
+  const A = a => !b && actionDown(a);
   return {
-    mx: b ? 0 : (keys.d ? 1 : 0) - (keys.a ? 1 : 0), my: b ? 0 : (keys.s ? 1 : 0) - (keys.w ? 1 : 0),
+    mx: (A('right') ? 1 : 0) - (A('left') ? 1 : 0), my: (A('down') ? 1 : 0) - (A('up') ? 1 : 0),
     ax: Math.round(mouse.wx), ay: Math.round(mouse.wy),
-    fire: !b && mouse.l, q: !b && (!!keys.q || mouse.r), e: !b && !!keys.e, r: !b && !!keys.r, dash: !b && (!!keys[' '] || !!keys.shift),
+    fire: A('basic'), q: A('q'), e: A('e'), r: A('r'), dash: A('dash'),
   };
 }
 
@@ -596,12 +612,13 @@ function buildHud() {
   const mp = $('#me-port').getContext('2d'); mp.clearRect(0, 0, 84, 84); mp.drawImage(hunterPortrait(me.hunter, 84), 0, 0);
   $('#me-name').innerHTML = `${esc(me.name)} <span style="color:${CLASSES[H.classe].cor};font-size:13px">· ${H.nome}</span>`;
   const ab = $('#abil'); ab.innerHTML = '';
-  const defs = [['basic', 'basico', 'ESQ'], ['q', 'q', 'Q'], ['e', 'e', 'E'], ['r', 'r', 'R'], ['dash', null, 'ESP']];
-  defs.forEach(([key, hk, label], i) => {
+  const defs = [['basic', 'basico'], ['q', 'q'], ['e', 'e'], ['r', 'r'], ['dash', null]];
+  defs.forEach(([key, hk], i) => {
+    const label = keyShort(Settings.binds[key][0] || Settings.binds[key][1] || '');
     const d = document.createElement('div'); d.className = 'ab' + (key === 'r' ? ' ult' : '');
     const col = key === 'dash' ? '#d8f0ff' : CLASSES[H.classe].cor;
     const name = hk ? H.habilidades[hk].nome : 'Esquiva';
-    d.innerHTML = `<span class="ic" style="color:${col}">${key === 'dash' ? '»' : ICONS[me.hunter][i]}</span><span class="k">${label}</span><div class="cdv"></div><div class="cdt"></div>`;
+    d.innerHTML = `<span class="ic" style="color:${col}">${key === 'dash' ? '»' : ICONS[me.hunter][i]}</span><span class="k" data-k="${key}">${label}</span><div class="cdv"></div><div class="cdt"></div>`;
     d.title = name + (hk ? ' — ' + H.habilidades[hk].desc : '');
     ab.appendChild(d);
     HUD.ab.push({ key, el: d, cdv: d.querySelector('.cdv'), cdt: d.querySelector('.cdt'), max: key === 'dash' ? DASH_CD : key === 'basic' ? H.habilidades.basico.cd : H.habilidades[key].cd, p: -1, t: null, rdy: null });
@@ -736,13 +753,59 @@ function buildProfile() {
   const lad = $('#pf-ladder');
   for (let i = 0; i <= RANK_MAX; i++) { const d = document.createElement('div'); if (i === P.rank) d.className = 'cur'; d.appendChild(rankCanvas(i, 88)); d.insertAdjacentHTML('beforeend', `<span>${rankName(i)}</span>`); lad.appendChild(d); }
 }
-function buildSettings() {
-  for (const b of $$('#set-quality button')) {
-    b.classList.toggle('on', b.dataset.q === Settings.quality);
-    b.onclick = () => { Settings.quality = b.dataset.q; saveSettings(); applyQuality(b.dataset.q === 'auto' ? 'alta' : b.dataset.q); buildSettings(); };
+// ------------------------------------------------------------------
+//  Configurações (janela com abas)
+// ------------------------------------------------------------------
+let setTab = 'video';
+function openSettings() { binding = null; $('#set-modal').classList.add('show'); renderSettings(); }
+function closeSettings() { binding = null; $('#set-modal').classList.remove('show'); }
+function buildHudLabels() { for (const el of $$('.ab .k')) { const k = el.dataset.k; el.textContent = keyShort(Settings.binds[k][0] || Settings.binds[k][1] || ''); } }
+function toggleRow(id, label, sub) {
+  return `<div class="set-row"><span class="lbl2">${label}${sub ? `<small>${sub}</small>` : ''}</span><label class="switch"><input type="checkbox" data-set="${id}" ${Settings[id] ? 'checked' : ''}><i></i></label></div>`;
+}
+function renderSettings() {
+  for (const b of $$('#set-tabs button')) { b.classList.toggle('on', b.dataset.tab === setTab); b.onclick = () => { setTab = b.dataset.tab; binding = null; renderSettings(); }; }
+  const B = $('#set-body'); let h = '';
+  if (setTab === 'video') {
+    h += `<div class="set-row"><span class="lbl2">Qualidade gráfica<small>Atual: ${QUALITY[curQ].name}${Settings.quality === 'auto' ? ' (automático)' : ''}</small></span><div class="seg">${['auto', 'alta', 'media', 'baixa'].map(q => `<button data-q="${q}" class="${Settings.quality === q ? 'on' : ''}">${q === 'auto' ? 'Auto' : QUALITY[q].name}</button>`).join('')}</div></div>`;
+    h += `<p class="hint" style="margin:6px 0">Se travar, use Média ou Baixa. No Auto o jogo baixa a qualidade sozinho quando o PC sofre.</p>`;
+    h += toggleRow('smooth', 'Movimento suave', 'Interpola entre os quadros da simulação (deixa tudo mais liso)');
+    h += toggleRow('fps', 'Mostrar FPS', `Atalho: ${keyLabel(Settings.binds.fps[0])}`);
+    h += toggleRow('shake', 'Tremor de tela', 'Em explosões e quando você leva dano');
+    h += toggleRow('dmgNumbers', 'Números de dano e cura');
+    h += toggleRow('names', 'Nomes acima dos caçadores');
+  } else if (setTab === 'audio') {
+    h += `<div class="set-row"><span class="lbl2">Volume geral</span><span><input type="range" min="0" max="100" value="${Settings.volume}" data-range="volume"> <b id="vol-v">${Settings.volume}%</b></span></div>`;
+    h += toggleRow('sound', 'Som ligado', 'Atalho na partida: M');
+  } else if (setTab === 'controls') {
+    h += `<p class="hint">Clique numa tecla e aperte a nova (vale botão do mouse também). <b>Esc</b> cancela, <b>Backspace</b> apaga. Se a tecla já estiver em outra ação, ela sai de lá.</p><table class="kb-table">`;
+    let grp = '';
+    for (const a of ACTIONS) {
+      if (a.grupo !== grp) { grp = a.grupo; h += `<tr><td colspan="3" style="color:var(--gold);font-size:12px;letter-spacing:1.5px;padding-top:12px">${grp.toUpperCase()}</td></tr>`; }
+      const cell = slot => { const c = Settings.binds[a.id][slot]; const w = binding && binding.action === a.id && binding.slot === slot; return `<td><button class="kb ${w ? 'wait' : ''} ${c ? '' : 'empty'}" data-bind="${a.id}" data-slot="${slot}">${w ? 'Aperte uma tecla...' : keyLabel(c)}</button></td>`; };
+      h += `<tr><td>${a.nome}${a.dica ? `<small>${a.dica}</small>` : ''}</td>${cell(0)}${cell(1)}</tr>`;
+    }
+    h += `<tr><td>Pausa<small>fixo</small></td><td colspan="2" class="hint">Esc</td></tr></table><div class="set-foot"><span></span><button class="btn ghost" data-reset="binds">Restaurar padrão</button></div>`;
+  } else if (setTab === 'game') {
+    h += toggleRow('lookahead', 'Câmera acompanha a mira', 'A câmera puxa um pouco na direção do mouse');
+    h += `<div class="set-row"><span class="lbl2">Conexão das salas<small>Local serve só para testar com várias abas no mesmo PC</small></span><div class="seg">${['online', 'local'].map(n => `<button data-net="${n}" class="${Settings.net === n ? 'on' : ''}">${n === 'online' ? 'Online' : 'Local (teste)'}</button>`).join('')}</div></div>`;
+    h += `<div class="set-foot"><span class="hint">Configurações ficam salvas neste navegador.</span><button class="btn ghost" data-reset="all">Restaurar tudo</button></div>`;
   }
-  const f = $('#set-fps'); f.checked = Settings.fps; f.onchange = () => { Settings.fps = f.checked; saveSettings(); };
-  const s = $('#set-sound'); s.checked = SFX.on; s.onchange = () => { if (SFX.on !== s.checked) SFX.toggle(); Settings.sound = s.checked; saveSettings(); };
+  B.innerHTML = h;
+  for (const b of B.querySelectorAll('[data-q]')) b.onclick = () => { Settings.quality = b.dataset.q; saveSettings(); applyQuality(b.dataset.q === 'auto' ? 'alta' : b.dataset.q); renderSettings(); };
+  for (const b of B.querySelectorAll('[data-net]')) b.onclick = () => { Settings.net = b.dataset.net; saveSettings(); renderSettings(); };
+  for (const c of B.querySelectorAll('[data-set]')) c.onchange = () => {
+    const k = c.dataset.set; Settings[k] = c.checked; saveSettings();
+    if (k === 'sound' && SFX.on !== c.checked) SFX.toggle();
+    applyGameplaySettings();
+  };
+  for (const r of B.querySelectorAll('[data-range]')) r.oninput = () => { Settings.volume = +r.value; $('#vol-v').textContent = r.value + '%'; SFX.setVolume(Settings.volume / 100); saveSettings(); };
+  for (const k of B.querySelectorAll('[data-bind]')) k.onclick = e => { if (binding) return; binding = { action: k.dataset.bind, slot: +k.dataset.slot }; renderSettings(); };
+  for (const b of B.querySelectorAll('[data-reset]')) b.onclick = () => {
+    if (b.dataset.reset === 'binds') Settings.binds = JSON.parse(JSON.stringify(DEFAULT_BINDS));
+    else { const keep = Settings.binds; Object.assign(Settings, JSON.parse(JSON.stringify(DEFAULT_SETTINGS))); Settings.binds = keep; applyQuality('alta'); SFX.setVolume(Settings.volume / 100); if (!SFX.on) SFX.toggle(); applyGameplaySettings(); }
+    saveSettings(); renderSettings(); buildHudLabels();
+  };
 }
 function buildCodex() {
   $('#codex-lore').innerHTML = `<p>${LORE.mundo}</p><p style="margin-top:8px;color:var(--cyan)">${LORE.arena}</p>`;
@@ -834,7 +897,6 @@ async function inviteFriend(uid, btn) {
 function joinFriendRoom(code) {
   if (App.inGame) return;
   if (App.role !== 'none') leaveRoom();
-  document.querySelector('input[name=net][value=online]').checked = true;
   $('#friends').classList.remove('show');
   readName(); App.net = 'online';
   startJoin(code);
@@ -903,7 +965,7 @@ function hostUpdate() {
     handleEvents(ev, App.sim);
     if (App.role === 'host') {
       App.pending.push(...ev);
-      if (App.ticks % 3 === 0) { App.tr.broadcast(encodeSnap(App.sim, App.pending)); App.pending = []; }
+      if (App.ticks % 2 === 0) { App.tr.broadcast(encodeSnap(App.sim, App.pending)); App.pending = []; }
     }
   }
   if (App.acc > TICK * 4) App.acc = 0;
@@ -951,13 +1013,22 @@ function gameFrame(dt) {
         else { const c = Math.min(1, dt * (err > 40 ? 6 : 2)); me.x += (me.tx - me.x) * c; me.y += (me.ty - me.y) * c; }
       }
     }
-    cs.tick(dt, me, pred);
+    cs.tick(dt, me, pred, Settings.smooth);
   }
   const me = meP(S) || S.players[0];
   let camT = me;
   if (!me.alive) camT = S.players.find(p => p.alive && p.team === me.team) || { x: me.soulX, y: me.soulY };
   const view = Object.assign({}, me, { x: me.alive ? me.x : camT.x, y: me.alive ? me.y : camT.y });
+  // host/treino: desenha entre o passo anterior e o atual da simulação (mais liso em monitores rápidos)
+  let saved = null;
+  if (App.sim && Settings.smooth && App.sim.phase !== 'countdown') {
+    const al = Math.min(1, App.acc / TICK); saved = [];
+    for (const p of App.sim.players) if (p.px !== undefined && p.id !== App.myId || (p.id === App.myId && p.px !== undefined)) { saved.push([p, p.x, p.y, p.z]); p.x = p.px + (p.x - p.px) * al; p.y = p.py + (p.y - p.py) * al; p.z = p.pz + (p.z - p.pz) * al; }
+    for (const pr of App.sim.projectiles) if (pr.px !== undefined) { saved.push([pr, pr.x, pr.y, 0]); pr.x = pr.px + (pr.x - pr.px) * al; pr.y = pr.py + (pr.y - pr.py) * al; }
+    if (me.alive && view.id === me.id) { view.x = me.x; view.y = me.y; }
+  }
   R.frame(S, view, dt, App.screen === 'game' && !App.paused ? mouse : null);
+  if (saved) for (const [o, x, y, z] of saved) { o.x = x; o.y = y; if (o.z !== undefined && o.hp !== undefined) o.z = z; }
   updateHud(S, me, dt);
   if ((App.mmT = (App.mmT || 0) - dt) <= 0) { App.mmT = 0.15; R.minimap($('#minimap'), S, me); }
 }

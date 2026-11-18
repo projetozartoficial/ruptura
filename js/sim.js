@@ -178,6 +178,9 @@ class Sim {
   // ---------- passo de simulação ----------
   step(dt) {
     this.time += dt;
+    // guarda a posição anterior (para desenhar suavizado entre os passos)
+    for (const p of this.players) { p.px = p.x; p.py = p.y; p.pz = p.z; }
+    for (const pr of this.projectiles) { pr.px = pr.x; pr.py = pr.y; }
     this.visCache.clear();
     if (this.phase === 'countdown') {
       this.phaseT -= dt;

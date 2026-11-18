@@ -61,5 +61,6 @@ const SFX = (() => {
   return {
     init, play(k, ms = 40) { if (!ac) return; if (ac.state === 'suspended') ac.resume(); if (lib[k] && lim(k, ms)) lib[k](); },
     toggle() { enabled = !enabled; return enabled; }, get on() { return enabled; },
+    setVolume(v) { vol = v; if (master) master.gain.value = v; },
   };
 })();

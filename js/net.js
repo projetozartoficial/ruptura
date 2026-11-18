@@ -249,6 +249,11 @@ class ClientState {
     this.snapT = 0;
   }
   apply(s, myId) {
+    // guarda o snapshot com a hora de chegada (interpolação com atraso fixo)
+    const now = performance.now();
+    this.buf = this.buf || [];
+    const pos = new Map(); for (const a of s.P) pos.set(a[0], [a[1], a[2], a[3], a[8]]);
+    this.buf.push({ t: now, pos }); if (this.buf.length > 12) this.buf.shift();
     this.phase = s.ph; this.phaseT = s.pt; this.round = s.rd; this.score = s.sc; this.night = !!s.ng; this.fightT = s.ft; this.storm.r = s.st; this.winner = s.w;
     for (const a of s.P) {
       const p = this.players.find(q => q.id === a[0]); if (!p) continue;
@@ -268,15 +273,35 @@ class ClientState {
     this.zones = s.Z.map(z => ({ id: z[0], type: ZKINDS[z[1]], x: z[2], y: z[3], r: z[4], t: z[5], T: z[6], team: z[7] }));
     this.walls = s.L.map(w => ({ t: 'circ', k: 'ice', id: w[0], x: w[1], y: w[2], r: w[3], life: w[4], T: w[5] }));
   }
-  // suavização entre snapshots
-  tick(dt, me, pred) {
-    const k = 1 - Math.exp(-dt * 16);
-    const age = (performance.now() - this.snapT) / 1000;
+  // interpolação: desenha os outros jogadores ~80ms no passado, entre dois snapshots reais
+  tick(dt, me, pred, smooth) {
+    const now = performance.now(), B = this.buf || [];
+    const DELAY = smooth === false ? 0 : 80;
+    const rt = now - DELAY;
+    let a = null, b = null;
+    for (let i = B.length - 1; i > 0; i--) if (B[i - 1].t <= rt) { a = B[i - 1]; b = B[i]; break; }
     for (const p of this.players) {
       if (p === me && pred) continue;
+      if (a && b && rt <= b.t) {
+        const pa = a.pos.get(p.id), pb = b.pos.get(p.id);
+        if (pa && pb) {
+          const f = (rt - a.t) / Math.max(1, b.t - a.t);
+          if (Math.hypot(pb[0] - pa[0], pb[1] - pa[1]) > 250) { p.x = pb[0]; p.y = pb[1]; }
+          else { p.x = pa[0] + (pb[0] - pa[0]) * f; p.y = pa[1] + (pb[1] - pa[1]) * f; }
+          if (p !== me) p.aim = pa[2] + angDiff(pa[2], pb[2]) * f;
+          p.z = pa[3] + (pb[3] - pa[3]) * f;
+          continue;
+        }
+      }
+      const k = 1 - Math.exp(-dt * 20);
       p.x += (p.tx - p.x) * k; p.y += (p.ty - p.y) * k;
     }
-    for (const pr of this.projectiles) { const a = Math.min(age, 0.15); pr.x = pr.sx + pr.vx * a; pr.y = pr.sy + pr.vy * a; pr.trav = pr.trav0 + Math.hypot(pr.vx, pr.vy) * a; }
+    const age = (now - this.snapT) / 1000 - DELAY / 1000;
+    for (const pr of this.projectiles) {
+      pr.hidden = age < -0.02 && pr.trav0 < 40;
+      const t = Math.max(0, Math.min(age, 0.12));
+      pr.x = pr.sx + pr.vx * t; pr.y = pr.sy + pr.vy * t; pr.trav = pr.trav0 + Math.hypot(pr.vx, pr.vy) * t;
+    }
     for (const z of this.zones) z.t -= dt;
     for (const w of this.walls) w.life -= dt;
   }

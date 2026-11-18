@@ -356,6 +356,7 @@ class Renderer {
     this.anim = new Map();
     this.time = 0;
     this.Q = QUALITY.alta;
+    this.visCache = new Map();
     this.fog = document.createElement('canvas');
     this.fctx = this.fog.getContext('2d');
     this.buildGround();
@@ -613,7 +614,7 @@ class Renderer {
     }
   }
   ring(x, y, r, color, life = 0.45, w = 6) { this.emit({ x, y, z: 0, vx: 0, vy: 0, vz: 0, life: 0, max: life, size: r, color, add: true, grav: 0, type: 'ring', w }); }
-  text(x, y, str, color, big) { this.emit({ x: x + rnd(-10, 10), y, z: 60, vx: rnd(-20, 20), vy: 0, vz: 80, life: 0, max: 0.9, size: big ? 22 : 16, color, add: false, grav: 120, type: 'text', str }); }
+  text(x, y, str, color, big) { if (this.dmgNumbers === false) return; this.emit({ x: x + rnd(-10, 10), y, z: 60, vx: rnd(-20, 20), vy: 0, vz: 80, life: 0, max: 0.9, size: big ? 22 : 16, color, add: false, grav: 120, type: 'text', str }); }
 
   onEvent(e, S, me) {
     const P = id => S.players.find(p => p.id === id);
@@ -706,11 +707,12 @@ class Renderer {
     const z = Math.min(1.25, Math.max(0.55, Math.min(W / dp / 1500, Hh / dp / 900))) * dp;
     this.cam.z = z;
     let fx = me.x, fy = me.y;
-    if (mouse && me.alive) { fx += (mouse.wx - me.x) * 0.18; fy += (mouse.wy - me.y) * 0.18; }
+    if (mouse && me.alive && this.lookahead !== false) { fx += (mouse.wx - me.x) * 0.18; fy += (mouse.wy - me.y) * 0.18; }
     const k = 1 - Math.exp(-dt * 8);
     this.cam.x += (fx - this.cam.x) * k; this.cam.y += (fy - this.cam.y) * k;
     this.shake *= Math.exp(-dt * 8);
-    const sx = (Math.random() - 0.5) * this.shake, sy = (Math.random() - 0.5) * this.shake;
+    const sh = this.shakeOn === false ? 0 : this.shake;
+    const sx = (Math.random() - 0.5) * sh, sy = (Math.random() - 0.5) * sh;
 
     // fundo: abismo
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -957,8 +959,7 @@ class Renderer {
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     for (let i = 100; i < p.maxHp; i += 100) ctx.fillRect(x + w * i / tot, y, 1, 7);
     ctx.font = '600 11px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
-    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.strokeText(p.name, p.x, y - 5);
-    ctx.fillText(p.name, p.x, y - 5);
+    if (this.names !== false) { ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.strokeText(p.name, p.x, y - 5); ctx.fillText(p.name, p.x, y - 5); }
   }
   drawReviveBar(ctx, p) {
     const f = Math.min(1, p.revive / 3.5);
@@ -966,6 +967,7 @@ class Renderer {
     ctx.beginPath(); ctx.arc(p.soulX, p.soulY - 30, 22, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2); ctx.stroke();
   }
   drawProj(ctx, pr, S, T) {
+    if (pr.hidden) return;
     const a = Math.atan2(pr.vy, pr.vx);
     const x = pr.x, y = pr.y - 26;
     const glow = (col, r, al = 1) => { ctx.globalAlpha = al; ctx.drawImage(glowSprite(col), x - r, y - r, r * 2, r * 2); ctx.globalAlpha = 1; };
@@ -1137,7 +1139,10 @@ class Renderer {
     const solids = MAP_OBS.concat(S.walls || []);
     for (const p of S.players) {
       if (!p.alive || p.team !== me.team) continue;
-      const { pts, cone } = visionPoly(solids, p, S.night);
+      const key = `${p.x | 0},${p.y | 0},${(p.aim * 30) | 0},${S.night ? 1 : 0},${(S.walls || []).length}`;
+      let vc = this.visCache.get(p.id);
+      if (!vc || vc.key !== key) { vc = { key, ...visionPoly(solids, p, S.night) }; this.visCache.set(p.id, vc); }
+      const { pts, cone } = vc;
       for (const L of cone ? [pts, cone] : [pts]) {
         f.beginPath(); f.moveTo(L[0], L[1]);
         for (let i = 2; i < L.length; i += 2) f.lineTo(L[i], L[i + 1]);
