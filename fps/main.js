@@ -57,39 +57,250 @@ function hunterPortraitFPS(h) {
 }
 try { App.hunter = localStorage.getItem('ruptura-fps-h') || 'brasa'; if (!FPS_HUNTERS[App.hunter]) App.hunter = 'brasa'; } catch (e) { }
 
-function startMatch() {
-  AU.init();
-  const name = (window.Account && Account.profile && Account.profile.name) || 'Você';
+const myName = () => (window.Account && Account.profile && Account.profile.name) || 'Você';
+App.role = 'solo'; App.net = new URLSearchParams(location.search).get('net') === 'local' ? 'local' : 'online';
+function botSlots(slots) {
   const names = BOT_NAMES_F.slice().sort(() => Math.random() - 0.5);
-  const slots = [];
-  for (let i = 0; i < RULES.teamSize * 2; i++) {
-    if (i === 0) slots.push({ id: 1, name, bot: false, hunter: App.hunter });
-    else {
-      const team = i < RULES.teamSize ? 0 : 1, used = slots.filter((s, j) => (j < RULES.teamSize ? 0 : 1) === team).map(s => s.hunter);
-      const free = FPS_HUNTER_IDS.filter(h => !used.includes(h));
-      slots.push({ id: i + 1, name: names.pop() + ' [bot]', bot: true, hunter: free[(Math.random() * free.length) | 0] || 'brasa' });
-    }
-  }
-  App.G = new Game(App.M, slots);
-  App.me = App.G.byId(1);
-  App.yaw = App.me.yaw; App.pitch = 0;
-  App.feed = []; App.parts = [];
-  $('#menu').style.display = 'none'; $('#hud').style.display = '';
-  App.running = true; lockPointer();
-  handleEvents(App.G.drain());
+  return slots.map((s, i) => {
+    if (s.kind !== 'empty') return s;
+    const team = i < RULES.teamSize ? 0 : 1, used = slots.filter((x, j) => x.kind !== 'empty' && (j < RULES.teamSize ? 0 : 1) === team).map(x => x.hunter);
+    const free = FPS_HUNTER_IDS.filter(h => !used.includes(h));
+    const h = free[(Math.random() * free.length) | 0] || FPS_HUNTER_IDS[(Math.random() * 5) | 0];
+    used.push(h); return { kind: 'bot', name: names.pop() + ' [bot]', hunter: h };
+  });
 }
+function startMatch(slotsIn) {
+  AU.init();
+  let slots = slotsIn;
+  if (!slots) { App.role = 'solo'; const S = Array.from({ length: RULES.teamSize * 2 }, () => ({ kind: 'empty' })); S[0] = { kind: 'human', pid: 'me', name: myName(), hunter: App.hunter }; slots = botSlots(S); App.myPid = 'me'; }
+  App.slots = slots;
+  App.G = new Game(App.M, slots.map((s, i) => ({ id: i + 1, pid: s.pid, name: s.name, bot: s.kind === 'bot', hunter: s.hunter })));
+  App.me = App.G.players.find(p => p.pid === App.myPid) || App.G.players[0];
+  App.yaw = App.me.yaw; App.pitch = 0;
+  App.feed = []; App.parts = []; App.evBuf = []; App.seq = 0; App.pend = []; App.outQ = []; App.evOut = []; App.snaps = []; App.estTick = 0; App.ended = false;
+  const ev = App.G.drain(); if (App.role !== 'client') handleEvents(ev);
+  $('#menu').style.display = 'none'; $('#room').classList.remove('show'); $('#end').classList.remove('show'); $('#hud').style.display = '';
+  App.running = true; App.lastSim = performance.now(); lockPointer();
+}
+function quitMatch() {
+  App.running = false; App.G = null; App.me = null;
+  $('#pause').classList.remove('show'); $('#hud').style.display = 'none'; $('#end').classList.remove('show'); document.exitPointerLock?.();
+  if (App.role === 'host' || App.role === 'client') leaveRoom(); else $('#menu').style.display = '';
+}
+// manda um comando pontual (trocar arma, recarregar, comprar, habilidade...)
+function sendEv(o) { if (App.role === 'client') { App.evOut.push(o); if (o.buy) App.me.in.buyLocal = o.buy; } else Object.assign(App.me.in, o); }
 $('#btn-play').onclick = () => startMatch();
 $('#btn-resume').onclick = () => { $('#pause').classList.remove('show'); lockPointer(); };
-$('#btn-quit').onclick = () => { App.running = false; $('#pause').classList.remove('show'); $('#hud').style.display = 'none'; $('#menu').style.display = ''; document.exitPointerLock?.(); };
+$('#btn-quit').onclick = () => quitMatch();
+
+// ---------------- salas online ----------------
+const emptySlots = () => Array.from({ length: RULES.teamSize * 2 }, () => ({ kind: 'empty' }));
+function roomMsg(t) { $('#rmsg').textContent = t || ''; }
+async function hostRoom() {
+  AU.init();
+  const code = Array.from({ length: 5 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[(Math.random() * 31) | 0]).join('');
+  App.code = code; App.role = 'host'; App.myPid = 'host';
+  App.slots = emptySlots(); App.slots[0] = { kind: 'human', pid: 'host', name: myName(), hunter: App.hunter };
+  try { App.tr = await Transport.host(App.net, 'T' + code, { onJoin() { }, onLeave: hostLeave, onMsg: hostMsg }); }
+  catch (e) { App.role = 'solo'; $('#acctmsg').textContent = e.message; return; }
+  openRoom();
+}
+async function joinRoom(code) {
+  code = (code || '').trim().toUpperCase(); if (code.length < 4) { $('#acctmsg').textContent = 'Digite o código da sala.'; return; }
+  AU.init(); $('#acctmsg').textContent = 'Conectando...';
+  try { App.tr = await Transport.join(App.net, 'T' + code, { onMsg: clientMsg, onClose: clientClose }); }
+  catch (e) { $('#acctmsg').textContent = e.message; return; }
+  App.role = 'client'; App.code = code; App.myPid = null; App.slots = emptySlots();
+  App.tr.send({ t: 'hello', name: myName(), hunter: App.hunter });
+  $('#acctmsg').textContent = ''; openRoom();
+}
+function leaveRoom() {
+  try { App.tr && App.tr.close(); } catch (e) { }
+  App.tr = null; App.role = 'solo'; App.G = null; App.running = false;
+  $('#room').classList.remove('show'); $('#hud').style.display = 'none'; $('#end').classList.remove('show'); $('#menu').style.display = '';
+}
+function freeSlot() {
+  const hum = t => App.slots.slice(t * RULES.teamSize, (t + 1) * RULES.teamSize).filter(x => x.kind === 'human').length;
+  const order = hum(0) <= hum(1) ? [0, 1] : [1, 0];
+  for (const t of order) for (let i = t * RULES.teamSize; i < (t + 1) * RULES.teamSize; i++) if (App.slots[i].kind === 'empty') return i;
+  return -1;
+}
+function hostMsg(pid, m) {
+  if (m.t === 'hello') {
+    if (App.G) { App.tr.send(pid, { t: 'full', why: 'A partida já começou. Espere acabar.' }); return; }
+    const i = freeSlot(); if (i < 0) { App.tr.send(pid, { t: 'full', why: 'A sala está cheia.' }); return; }
+    App.slots[i] = { kind: 'human', pid, name: String(m.name || 'Jogador').slice(0, 16), hunter: FPS_HUNTERS[m.hunter] ? m.hunter : 'brasa' };
+    App.tr.send(pid, { t: 'welcome', pid }); syncRoom(); return;
+  }
+  if (m.t === 'hunter') { const sl = App.slots.find(x => x.pid === pid); if (sl && FPS_HUNTERS[m.h] && !App.G) { sl.hunter = m.h; syncRoom(); } return; }
+  if (m.t === 'move') { moveSlot(pid, m.i); return; }
+  if (m.t === 'in' && App.G) {
+    const p = App.G.players.find(q => q.pid === pid); if (!p || p.bot) return;
+    p.netQ = p.netQ || []; for (const a of m.L) p.netQ.push(a);
+    if (p.netQ.length > 60) p.netQ.splice(0, p.netQ.length - 30);
+    p.viewTick = m.vt;
+    for (const ev of m.ev || []) Object.assign(p.in, ev);
+  }
+}
+function hostLeave(pid) {
+  const i = App.slots.findIndex(x => x.pid === pid);
+  if (i >= 0) { const nm = App.slots[i].name; App.slots[i] = { kind: 'empty' }; if (!App.G) syncRoom(); else App.feed.unshift({ t: 5, txt: `${esc(nm)} saiu (um bot assumiu)` }); }
+  if (App.G) { const p = App.G.players.find(q => q.pid === pid); if (p) { p.bot = true; p.pid = null; p.brain = null; p.name = p.name + ' [bot]'; } }
+}
+function moveSlot(pid, i) {
+  if (App.G || !App.slots[i] || App.slots[i].kind !== 'empty') return;
+  const j = App.slots.findIndex(x => x.pid === pid); if (j < 0) return;
+  App.slots[i] = App.slots[j]; App.slots[j] = { kind: 'empty' }; syncRoom();
+}
+function syncRoom() { if (App.role === 'host' && App.tr) App.tr.broadcast({ t: 'room', slots: App.slots }); renderRoom(); }
+function clientMsg(m) {
+  switch (m.t) {
+    case 'welcome': App.myPid = m.pid; renderRoom(); break;
+    case 'room': App.slots = m.slots; renderRoom(); break;
+    case 'full': leaveRoom(); $('#acctmsg').textContent = m.why; break;
+    case 'start': startMatch(m.slots); break;
+    case 's': if (App.G) App.snaps.push(m); break;
+    case 'back': App.running = false; App.G = null; $('#hud').style.display = 'none'; $('#end').classList.remove('show'); document.exitPointerLock?.(); openRoom(); break;
+  }
+}
+function clientClose() { const inGame = !!App.G; leaveRoom(); $('#acctmsg').textContent = inGame ? 'O dono da sala saiu. A partida acabou.' : 'Conexão com a sala perdida.'; }
+function hostStart() {
+  if (App.role !== 'host' || App.G) return;
+  const S = botSlots(App.slots);
+  App.tr.broadcast({ t: 'start', slots: S });
+  startMatch(S);
+}
+function backToRoom() { // depois da partida, o dono leva todos de volta para a sala
+  App.running = false; App.G = null; $('#hud').style.display = 'none'; $('#end').classList.remove('show');
+  App.slots = App.slots.map(s => s.kind === 'bot' ? { kind: 'empty' } : s);
+  App.tr.broadcast({ t: 'back' }); openRoom(); syncRoom();
+}
+function openRoom() { $('#menu').style.display = 'none'; $('#room').classList.add('show'); renderRoom(); }
+function renderRoom() {
+  if (!$('#room').classList.contains('show')) return;
+  if (!App.slots) App.slots = emptySlots();
+  const hide = App.hideCode;
+  $('#rcode').textContent = hide ? '•••••' : App.code;
+  $('#btn-rstart').style.display = App.role === 'host' ? '' : 'none';
+  roomMsg(App.role === 'host' ? 'Passe o código para seus amigos. Vagas vazias viram bots.' : App.myPid ? 'Esperando o dono da sala começar...' : 'Entrando...');
+  for (const t of [0, 1]) {
+    const el = $('#rt' + t);
+    el.innerHTML = `<h4 style="color:${TEAM_COL[t]}">${TEAM_NAME[t]}</h4>` + App.slots.slice(t * RULES.teamSize, (t + 1) * RULES.teamSize).map((x, k) => {
+      const i = t * RULES.teamSize + k;
+      if (x.kind === 'empty') return `<div class="rs empty" data-i="${i}">+ vaga (bot) — clique para entrar</div>`;
+      return `<div class="rs${x.pid === App.myPid ? ' me' : ''}"><b>${esc(x.name)}${x.pid === App.myPid ? ' (você)' : x.pid === 'host' ? ' ★' : ''}</b><span>${HUNTERS[x.hunter].nome} · ${CLASSES[HUNTERS[x.hunter].classe].nome}</span></div>`;
+    }).join('');
+    el.querySelectorAll('.rs.empty').forEach(d => d.onclick = () => { if (App.role === 'host') moveSlot('host', +d.dataset.i); else App.tr.send({ t: 'move', i: +d.dataset.i }); });
+  }
+  $('#rpick').innerHTML = FPS_HUNTER_IDS.map(h => `<button class="rh${App.hunter === h ? ' on' : ''}" data-h="${h}" style="--c:${CLASSES[HUNTERS[h].classe].cor}">${HUNTERS[h].nome}<small>${CLASSES[HUNTERS[h].classe].nome}</small></button>`).join('');
+  $('#rpick').querySelectorAll('.rh').forEach(b => b.onclick = () => {
+    App.hunter = b.dataset.h; try { localStorage.setItem('ruptura-fps-h', App.hunter); } catch (e) { }
+    if (App.role === 'host') { const sl = App.slots.find(x => x.pid === 'host'); if (sl) sl.hunter = App.hunter; syncRoom(); }
+    else { App.tr.send({ t: 'hunter', h: App.hunter }); renderRoom(); }
+  });
+}
+$('#btn-host').onclick = () => hostRoom();
+$('#btn-join').onclick = () => joinRoom($('#in-code').value);
+$('#in-code').onkeydown = e => { if (e.key === 'Enter') joinRoom($('#in-code').value); };
+$('#btn-rstart').onclick = () => hostStart();
+$('#btn-rleave').onclick = () => leaveRoom();
+$('#btn-rcopy').onclick = () => { try { navigator.clipboard.writeText(App.code); $('#btn-rcopy').textContent = 'Copiado!'; setTimeout(() => $('#btn-rcopy').textContent = 'Copiar', 1200); } catch (e) { } };
+$('#btn-rhide').onclick = () => { App.hideCode = !App.hideCode; renderRoom(); };
+
+// ---------------- rede durante a partida ----------------
+const INTERP = 6; // ticks de atraso para suavizar os outros (100ms)
+function hostFeed() {
+  for (const p of App.G.players) {
+    if (!p.pid || p.pid === App.myPid || p.bot || !p.netQ || !p.netQ.length) continue;
+    // se acumulou comandos (atraso), anda os extras para não perder movimento
+    while (p.netQ.length > 3) { const x = p.netQ.shift(); unpackIn(p.in, x.slice(1)); p.yaw = p.in.yaw; if (p.alive) App.G.moveStep(p, p.in, TICK, true); p.ackSeq = x[0]; }
+    const a = p.netQ.shift(); unpackIn(p.in, a.slice(1)); p.ackSeq = a[0];
+  }
+}
+function hostSend(ev) {
+  App.evBuf.push(...ev);
+  if ((App.G.tick || 0) % 2) return;
+  const acks = {}; for (const p of App.G.players) if (p.pid && p.ackSeq) acks[p.pid] = p.ackSeq;
+  App.tr.broadcast(packSnap(App.G, App.evBuf, acks)); App.evBuf = [];
+}
+function clientTick() {
+  const G = App.G, me = App.me, I = me.in;
+  App.seq++;
+  App.outQ.push([App.seq, ...packIn(I)]);
+  App.pend.push({ seq: App.seq, I: { mx: I.mx, mz: I.mz, yaw: I.yaw, pitch: I.pitch, jump: I.jump, crouch: I.crouch, walk: I.walk } });
+  if (App.pend.length > 120) App.pend.shift();
+  if (me.alive) { me.yaw = I.yaw; me.pitch = I.pitch; me.slowT = Math.max(0, me.slowT - TICK); me.stunT = Math.max(0, me.stunT - TICK); G.moveStep(me, I, TICK, true); }
+  localFire(me, I);
+  App.estTick += 1; App.ct = (App.ct || 0) + TICK;
+  for (const t of G.tracers) t.t -= TICK; G.tracers = G.tracers.filter(t => t.t > 0);
+  if (App.seq % 2 === 0) { App.tr.send({ t: 'in', L: App.outQ, vt: Math.round(App.estTick - INTERP), ev: App.evOut }); App.outQ = []; App.evOut = []; }
+}
+function clientSnaps() {
+  const G = App.G, me = App.me;
+  while (App.snaps.length) {
+    const S = App.snaps.shift();
+    applySnap(G, S, me.id);
+    if (!App.estTick || Math.abs(S.tk - App.estTick) > 12) App.estTick = S.tk; else App.estTick += (S.tk - App.estTick) * 0.08;
+    // reconcilia o próprio boneco: volta para a posição do servidor e refaz os comandos ainda não confirmados
+    const ack = (S.A && S.A[App.myPid]) || 0;
+    App.pend = App.pend.filter(q => q.seq > ack);
+    const sv = me.server;
+    if (sv && S.rd !== App.lastRd) { App.lastRd = S.rd; me.yaw = sv.yaw; me.pitch = 0; App.pend = []; }
+    if (sv && me.alive) {
+      const px = me.x, pz = me.z;
+      Object.assign(me, { x: sv.x, y: sv.y, z: sv.z, vx: sv.vx, vy: sv.vy, vz: sv.vz, crouch: sv.crouch, onGround: me.onGroundNet });
+      for (const q of App.pend) { me.yaw = q.I.yaw; G.moveStep(me, q.I, TICK, true); }
+      if (Math.hypot(px - me.x, pz - me.z) > 3) { App.yaw = me.yaw; }
+    }
+    if (sv && !me.alive) { me.x = sv.x; me.z = sv.z; }
+    handleEvents(S.E);
+  }
+  interpOthers(G, me.id, App.estTick - INTERP);
+}
+function localFire(me, I) {
+  const G = App.G;
+  me.lfCd = Math.max(0, (me.lfCd || 0) - TICK);
+  me.recoil = Math.max(0, (me.recoil || 0) - TICK * 14 * ((App.ct || 0) - (me.lfLast || 0) > 0.12 ? 1 : 0));
+  if (!I.fire || !me.alive || App.buyOpen) { me.lfHeld = false; return; }
+  const W = G.curW(me); if (!W) return;
+  if (!(G.phase === 'live' || G.phase === 'planted') || me.stunT > 0 || me.switchT > 0 || me.reloadT > 0 || me.lfCd > 0) return;
+  if (W.melee) { me.lfCd = 1 / W.rps; return; }
+  const g = me.guns[me.cur]; if (!g || g.ammo <= 0) return;
+  if (!W.auto && me.lfHeld) return;
+  me.lfHeld = true; me.lfCd = 1 / W.rps; me.lfLast = App.ct || 0;
+  const ey = G.eye(me), d = fwdVec(me.yaw, me.pitch + me.recoil * Math.PI / 180), h = G.trace(me.x, ey, me.z, d[0], d[1], d[2], 200, me, 'walls');
+  G.tracers.push({ x0: me.x, y0: ey - 0.12, z0: me.z, x1: me.x + d[0] * h.t, y1: ey + d[1] * h.t, z1: me.z + d[2] * h.t, t: 0.06, owner: me.id });
+  me.recoil = Math.min(me.recoil + W.rec * 0.8, 9);
+  handleEvents([{ k: 'shot', id: me.id, w: g.id, x: me.x, z: me.z, local: true }]);
+}
+// o dono continua rodando a partida mesmo com a aba escondida
+try {
+  const wk = new Worker(URL.createObjectURL(new Blob(['setInterval(()=>postMessage(0),16)'], { type: 'text/javascript' })));
+  wk.onmessage = () => { const now = performance.now(); if (App.running && now - (App.lastSim || 0) > 40) { readInput(); simPump(now); } };
+} catch (e) { }
+function simPump(now) {
+  const G = App.G; if (!G || !App.running) return;
+  App.acc += Math.min(0.25, (now - (App.lastSim || now)) / 1000); App.lastSim = now;
+  while (App.acc >= TICK) {
+    App.acc -= TICK;
+    if (App.role === 'client') clientTick();
+    else {
+      if (App.role === 'host') hostFeed();
+      G.step(TICK); const ev = G.drain(); handleEvents(ev);
+      if (App.role === 'host' && App.tr) hostSend(ev);
+    }
+  }
+  if (App.role === 'client') clientSnaps();
+}
 
 // ---------------- controles ----------------
 const keys = new Set(); let mouseL = false, mouseR = false;
 function lockPointer() { const c = $('#cv'); try { const r = c.requestPointerLock({ unadjustedMovement: true }); if (r && r.catch) r.catch(() => c.requestPointerLock()); } catch (e) { c.requestPointerLock?.(); } }
 document.addEventListener('pointerlockchange', () => {
   App.locked = document.pointerLockElement === $('#cv');
-  if (!App.locked && App.running && !App.buyOpen && !App.G?.phase?.startsWith('match')) $('#pause').classList.add('show');
+  if (!App.locked && App.running && !App.buyOpen && !App.ended) $('#pause').classList.add('show');
 });
-$('#cv').addEventListener('click', () => { if (App.running && !App.locked && !App.buyOpen) { $('#pause').classList.remove('show'); lockPointer(); } });
+$('#cv').addEventListener('click', () => { if (App.running && !App.locked && !App.buyOpen && !App.ended) { $('#pause').classList.remove('show'); lockPointer(); } });
 addEventListener('mousemove', e => {
   if (!App.locked || !App.me) return;
   const W = App.G.curW(App.me), z = W && W.zoom && App.me.zoom ? W.zoom : 1;
@@ -106,11 +317,10 @@ addEventListener('keydown', e => {
   if (e.code === 'Tab') { e.preventDefault(); $('#board').classList.add('show'); renderBoard(); }
   keys.add(e.code);
   const me = App.me; if (!me) return;
-  const I = me.in;
-  if (e.code === 'Digit1') I.slot = 1; if (e.code === 'Digit2') I.slot = 2; if (e.code === 'Digit3') I.slot = 3;
-  if (e.code === 'KeyR') I.reload = true;
-  if (e.code === 'KeyG') I.drop = true;
-  if (!e.repeat) for (const [code, k] of [['KeyC', 'c'], ['KeyQ', 'q'], ['KeyE', 'e'], ['KeyX', 'x']]) if (e.code === code) I.ab = k;
+  if (e.code === 'Digit1') sendEv({ slot: 1 }); if (e.code === 'Digit2') sendEv({ slot: 2 }); if (e.code === 'Digit3') sendEv({ slot: 3 });
+  if (e.code === 'KeyR') sendEv({ reload: true });
+  if (e.code === 'KeyG') sendEv({ drop: true });
+  if (!e.repeat) for (const [code, k] of [['KeyC', 'c'], ['KeyQ', 'q'], ['KeyE', 'e'], ['KeyX', 'x']]) if (e.code === code) sendEv({ ab: k });
   if (['Space', 'ControlLeft', 'KeyC', 'KeyQ', 'KeyE'].includes(e.code)) e.preventDefault();
 });
 addEventListener('keyup', e => { keys.delete(e.code); if (e.code === 'Tab') $('#board').classList.remove('show'); });
@@ -150,7 +360,7 @@ function renderBuy() {
     <div class="bnote">E · ${F.e.nome}: grátis (${F.e.free} por round)<br>X · ${F.x.nome}: ${FPS_ULT[me.hunter]} pontos (abates, mortes, plantar/desarmar)</div></div>`;
   h += '</div>';
   $('#buy').innerHTML = h;
-  $('#buy').querySelectorAll('[data-buy]').forEach(b => b.onclick = () => { me.in.buy = b.dataset.buy; AU.tone(800, 1200, 0.08, 0.15, 'triangle'); setTimeout(renderBuy, 40); });
+  $('#buy').querySelectorAll('[data-buy]').forEach(b => b.onclick = () => { sendEv({ buy: b.dataset.buy }); AU.tone(800, 1200, 0.08, 0.15, 'triangle'); setTimeout(renderBuy, App.role === 'client' ? 150 : 40); });
 }
 
 // ---------------- eventos -> efeitos/HUD ----------------
@@ -160,6 +370,8 @@ function handleEvents(evs) {
     const p = e.id ? G.byId(e.id) : null;
     switch (e.k) {
       case 'shot': {
+        if (App.role === 'client' && e.id === me.id && !e.local) break;
+        if (App.role === 'client' && e.tr && e.id !== me.id) for (const t of e.tr) G.tracers.push({ x0: t[0], y0: t[1], z0: t[2], x1: t[3], y1: t[4], z1: t[5], t: 0.06 });
         const W = WEAPONS[e.w], v = e.id === me.id ? 1 : AU.at(e.x, e.z);
         AU.noise(W.cat === 'Snipers' ? 0.35 : 0.13, W.cat === 'Pistolas' ? 2600 : 1800, (W.cat === 'Snipers' ? 0.55 : 0.32) * v, 0.7);
         AU.tone(W.cat === 'Snipers' ? 120 : 200, 50, 0.1, 0.25 * v, 'square');
@@ -221,11 +433,13 @@ function banner(t, s, ms, cls = '') {
   bannerTO = setTimeout(() => el.classList.remove('show'), ms);
 }
 function showEnd(won) {
-  App.running = false; document.exitPointerLock?.();
+  document.exitPointerLock?.(); App.ended = true;
   const G = App.G, me = App.me;
   $('#end').classList.add('show');
-  $('#end').innerHTML = `<div class="endbox"><h1 class="${won ? 'win' : 'lose'}">${won ? 'VITÓRIA' : 'DERROTA'}</h1><div class="sub">${G.score[me.team]} × ${G.score[1 - me.team]}</div>${boardHTML()}<div class="row"><a class="btn" href="index.html">Menu principal</a><button class="btn gold" id="btn-again">Jogar de novo</button></div></div>`;
-  $('#btn-again').onclick = () => { $('#end').classList.remove('show'); startMatch(); };
+  const again = App.role === 'host' ? 'Voltar para a sala' : App.role === 'client' ? '' : 'Jogar de novo';
+  $('#end').innerHTML = `<div class="endbox"><h1 class="${won ? 'win' : 'lose'}">${won ? 'VITÓRIA' : 'DERROTA'}</h1><div class="sub">${G.score[me.team]} × ${G.score[1 - me.team]}</div>${boardHTML()}<div class="row"><button class="btn" id="btn-endq">Sair</button>${again ? `<button class="btn gold" id="btn-again">${again}</button>` : '<span class="wait">Esperando o dono da sala...</span>'}</div></div>`;
+  $('#btn-endq').onclick = () => quitMatch();
+  if ($('#btn-again')) $('#btn-again').onclick = () => { $('#end').classList.remove('show'); if (App.role === 'host') backToRoom(); else startMatch(); };
   if (window.Account && Account.logged && Account.record) { try { Account.record({ mode: 'fps', won, my: G.score[me.team], opp: G.score[1 - me.team], hunter: me.hunter, kills: me.kills, deaths: me.deaths, dmg: me.dmg, heal: 0, perf: 1, oppMMR: 1000, vsBots: true }); } catch (e) { console.warn(e); } }
 }
 function boardHTML() {
@@ -459,18 +673,14 @@ function frame(now) {
     gl.begin(cam); gl.draw(App.mapMesh); return;
   }
   const G = App.G, me = App.me;
-  if (App.running) {
-    readInput();
-    App.acc += dt;
-    while (App.acc >= TICK) { G.step(TICK); App.acc -= TICK; handleEvents(G.drain()); }
-  }
+  if (App.running) { readInput(); simPump(now); }
   // câmera (morto: assiste um aliado vivo)
   let view = me;
   if (!me.alive) { const al = G.players.filter(p => p.alive && p.team === me.team); App.spec = al[0] || null; if (App.spec) view = App.spec; }
   const W = G.curW(view), zoom = view === me && me.alive && W && W.zoom && me.zoom ? W.zoom : 1;
   App.shake = Math.max(0, (App.shake || 0) - dt * 2);
   const sk = App.shake * 0.02;
-  const cam = { x: view.x + rnd(-sk, sk), y: G.eye(view) + rnd(-sk, sk), z: view.z, yaw: view === me ? App.yaw : view.yaw, pitch: (view === me ? App.pitch : view.pitch) + (view === me ? me.recoil * Math.PI / 180 * 0.6 : 0), fov: Math.atan(Math.tan(FS.fov * Math.PI / 180 / 2) / zoom * (innerHeight / innerWidth)) * 2 };
+  const cam = { x: view.x + rnd(-sk, sk), y: G.eye(view) + rnd(-sk, sk), z: view.z, yaw: view === me ? App.yaw : view.yaw, pitch: (view === me ? App.pitch : view.pitch) + (view === me ? (me.recoil || 0) * Math.PI / 180 * 0.6 : 0), fov: Math.atan(Math.tan(FS.fov * Math.PI / 180 / 2) / zoom * (innerHeight / innerWidth)) * 2 };
   gl.begin(cam);
   drawWorld(now / 1000, dt);
   if (view === me) drawViewmodel(now / 1000, dt);
@@ -492,8 +702,8 @@ buildMenu();
 
 // ---------------- conta: só quem está logado joga ----------------
 (function gate() {
-  const play = $('#btn-play');
-  if (!window.Account || !window.FIREBASE_CONFIG) { play.disabled = false; return; }
+  const play = { set disabled(v) { for (const id of ['#btn-play', '#btn-host', '#btn-join']) $(id).disabled = v; } };
+  if (!window.Account || !window.FIREBASE_CONFIG || App.net === 'local') { play.disabled = false; return; }
   play.disabled = true; $('#acctmsg').textContent = 'Verificando sua conta...';
   Account.on(() => {
     if (Account.logged) { play.disabled = false; $('#acctmsg').innerHTML = `Conectado como <b>${esc(Account.profile.name)}</b>${Account.profile.tag ? ' #' + esc(Account.profile.tag) : ''}`; }

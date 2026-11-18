@@ -7,7 +7,7 @@
 <link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="fps/fps.css?v=1">
+<link rel="stylesheet" href="fps/fps.css?v=2">
 </head>
 <body>
 <canvas id="cv"></canvas>
@@ -23,7 +23,7 @@
     <div class="mfoot">
       <div class="keys">WASD andar · Shift andar devagar · Ctrl agachar · Espaço pular · Mouse mirar/atirar · Botão direito: luneta · R recarregar · 1/2/3 armas · B loja · F plantar/desarmar/pegar · C Q E X habilidades · G largar arma · Tab placar · Esc pausa</div>
       <div class="acct" id="acctmsg"></div>
-      <button class="btn gold big" id="btn-play">Jogar contra bots</button>
+      <div class="online"><button class="btn gold big" id="btn-play">Jogar contra bots</button><button class="btn big" id="btn-host">Criar sala</button><input id="in-code" maxlength="6" placeholder="CÓDIGO" autocomplete="off"><button class="btn big" id="btn-join">Entrar</button></div>
     </div>
     <details class="setbox"><summary>Configurações</summary><div id="fpset" class="fpset"></div></details>
   </div>
@@ -46,17 +46,25 @@
   <div id="buy" class="buy"></div>
   <div id="board" class="board"></div>
 </div>
+<div id="room" class="room"><div class="rbox">
+  <div class="rhead"><div><small>SALA · MODO TÁTICO</small><b id="rcode"></b></div><button class="btn" id="btn-rcopy">Copiar</button><button class="btn ghost" id="btn-rhide" title="Esconder o código (para live)">👁</button><span class="sp"></span><button class="btn" id="btn-rleave">Sair</button></div>
+  <div class="rteams"><div class="rt" id="rt0"></div><div class="rvs">VS</div><div class="rt" id="rt1"></div></div>
+  <h4>Seu caçador</h4><div id="rpick" class="rpick"></div>
+  <div class="rfoot"><span id="rmsg"></span><button class="btn gold big" id="btn-rstart">Começar partida</button></div>
+</div></div>
 <div id="pause" class="pause"><div class="pbox"><h2>Pausa</h2><button class="btn gold" id="btn-resume">Continuar</button><button class="btn" id="btn-quit">Sair da partida</button><details class="setbox" open><summary>Configurações</summary><div class="fpset" id="fpset2"></div></details></div></div>
 <div id="end" class="end"></div>
 <div id="gate"></div>
 
 <script src="js/data.js?v=18"></script>
-<script src="fps/engine.js?v=1"></script>
-<script src="fps/data.js?v=1"></script>
-<script src="fps/world.js?v=1"></script>
-<script src="fps/game.js?v=1"></script>
+<script src="fps/engine.js?v=2"></script>
+<script src="fps/data.js?v=2"></script>
+<script src="fps/world.js?v=2"></script>
+<script src="fps/game.js?v=2"></script>
+<script src="js/net.js?v=18"></script>
+<script src="fps/net.js?v=1"></script>
 <script src="js/firebase-config.js?v=18"></script>
 <script src="js/account.js?v=18"></script>
-<script src="fps/main.js?v=1"></script>
+<script src="fps/main.js?v=2"></script>
 </body>
 </html>

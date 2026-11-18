@@ -21,7 +21,7 @@ class Game {
   }
   newPlayer(s, i) {
     return {
-      id: s.id, name: s.name, bot: !!s.bot, team: i < RULES.teamSize ? 0 : 1, slot: i, hunter: s.hunter,
+      id: s.id, pid: s.pid || null, name: s.name, bot: !!s.bot, team: i < RULES.teamSize ? 0 : 1, slot: i, hunter: s.hunter,
       x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, crouch: 0, onGround: true,
       hp: 100, armor: 0, alive: true, creds: RULES.startCreds,
       guns: { 1: null, 2: { id: 'lasca', ammo: 12, res: 36 } }, cur: 2, reloadT: 0, fireCd: 0, recoil: 0, burst: 0, lastShot: -9, zoom: false, switchT: 0,
@@ -94,6 +94,9 @@ class Game {
     if (this.phase === 'matchEnd') return;
     this.phaseT -= dt;
     for (const p of this.players) if (p.bot && p.alive) botThink(this, p, dt);
+    this.tick = (this.tick || 0) + 1;
+    this.hist = this.hist || [];
+    this.hist.push({ tk: this.tick, P: this.players.map(p => [p.x, p.y, p.z, p.crouch]) }); if (this.hist.length > 45) this.hist.shift();
     for (const p of this.players) this.updatePlayer(p, dt);
     this.updateGrenades(dt); this.updateZones(dt);
     this.revealTeam[0] = Math.max(0, this.revealTeam[0] - dt); this.revealTeam[1] = Math.max(0, this.revealTeam[1] - dt);
@@ -137,32 +140,7 @@ class Game {
     p.yaw = I.yaw; p.pitch = clamp(I.pitch, -1.5, 1.5);
     // compra
     if (I.buy) { this.buy(p, I.buy); I.buy = null; }
-    // agachar
-    const wantC = I.crouch ? 1 : 0;
-    if (wantC < p.crouch && this.headBlocked(p)) { } else p.crouch += (wantC - p.crouch) * Math.min(1, dt * 14);
-    // movimento
-    let sp = I.walk ? MOVE.walk : MOVE.run;
-    if (p.crouch > 0.5) sp = MOVE.crouch;
-    if (p.slowT > 0) sp *= 1 - p.slowAmt;
-    if (p.stunT > 0) sp *= 0.35;
-    const W = this.curW(p); if (W && W.cat === 'Pesadas') sp *= 0.92; if (W && W.zoom && p.zoom) sp *= 0.6;
-    const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw);
-    let mx = I.mx, mz = I.mz; const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
-    // mz>0 = para frente
-    const wx = sy * mz + cy * mx, wz = -cy * mz + sy * mx;
-    const tx = wx * sp, tz = wz * sp;
-    if (p.dashT > 0) { p.dashT -= dt; }
-    else {
-      const a = (p.onGround ? MOVE.accel : MOVE.air) * dt;
-      const dvx = tx - p.vx, dvz = tz - p.vz, dl = Math.hypot(dvx, dvz);
-      if (dl <= a) { p.vx = tx; p.vz = tz; } else { p.vx += dvx / dl * a; p.vz += dvz / dl * a; }
-    }
-    if (I.jump && p.onGround && p.stunT <= 0) { p.vy = MOVE.jump; p.onGround = false; this.emit({ k: 'jump', id: p.id }); }
-    p.vy -= MOVE.grav * dt;
-    // fase de compra: preso no spawn
-    const lockSpawn = this.phase === 'buy';
-    this.moveAxis(p, 'x', p.vx * dt, lockSpawn); this.moveAxis(p, 'z', p.vz * dt, lockSpawn); this.moveAxis(p, 'y', p.vy * dt);
-    if (p.y < -20) this.hurt(p, 999, null, 'body', 'queda');
+    this.moveStep(p, I, dt);
     // passos
     const hs = Math.hypot(p.vx, p.vz);
     p.stepAcc = (p.stepAcc || 0) + (p.onGround && !I.walk && p.crouch < 0.5 && hs > 4 ? hs * dt : 0);
@@ -195,6 +173,34 @@ class Game {
     if (I.ab) { this.useAbility(p, I.ab); I.ab = null; }
     // plantar / desarmar
     this.updateUse(p, dt);
+  }
+  // movimento (também usado pelo cliente para prever o próprio boneco)
+  moveStep(p, I, dt, silent) {
+    // agachar
+    const wantC = I.crouch ? 1 : 0;
+    if (wantC < p.crouch && this.headBlocked(p)) { } else p.crouch += (wantC - p.crouch) * Math.min(1, dt * 14);
+    // movimento
+    let sp = I.walk ? MOVE.walk : MOVE.run;
+    if (p.crouch > 0.5) sp = MOVE.crouch;
+    if (p.slowT > 0) sp *= 1 - p.slowAmt;
+    if (p.stunT > 0) sp *= 0.35;
+    const W = this.curW(p); if (W && W.cat === 'Pesadas') sp *= 0.92; if (W && W.zoom && p.zoom) sp *= 0.6;
+    const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw);
+    let mx = I.mx, mz = I.mz; const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
+    // mz>0 = para frente
+    const wx = sy * mz + cy * mx, wz = -cy * mz + sy * mx;
+    const tx = wx * sp, tz = wz * sp;
+    if (p.dashT > 0) { p.dashT -= dt; }
+    else {
+      const a = (p.onGround ? MOVE.accel : MOVE.air) * dt;
+      const dvx = tx - p.vx, dvz = tz - p.vz, dl = Math.hypot(dvx, dvz);
+      if (dl <= a) { p.vx = tx; p.vz = tz; } else { p.vx += dvx / dl * a; p.vz += dvz / dl * a; }
+    }
+    if (I.jump && p.onGround && p.stunT <= 0) { p.vy = MOVE.jump; p.onGround = false; if (!silent) this.emit({ k: 'jump', id: p.id }); }
+    p.vy -= MOVE.grav * dt;
+    // fase de compra: preso no spawn
+    const lockSpawn = this.phase === 'buy';
+    this.moveAxis(p, 'x', p.vx * dt, lockSpawn); this.moveAxis(p, 'z', p.vz * dt, lockSpawn); this.moveAxis(p, 'y', p.vy * dt);
   }
   curW(p) { if (p.cur === 3) return WEAPONS.faca; const g = p.guns[p.cur]; return g ? WEAPONS[g.id] : null; }
   height(p) { return PH.H - (PH.H - PH.HC) * p.crouch; }
@@ -241,24 +247,34 @@ class Game {
     const sp = this.spreadOf(p, W);
     const ey = this.eye(p);
     const n = W.pellets || 1;
-    const hits = [];
+    const hits = [], trs = [];
+    // compensação de atraso: volta os alvos para onde o atirador os via
+    let restore = null;
+    if (p.viewTick && this.hist && this.hist.length) {
+      const h0 = this.hist.find(h => h.tk >= p.viewTick) || this.hist[this.hist.length - 1];
+      const keep = this.players.map(q => [q.x, q.y, q.z, q.crouch]);
+      this.players.forEach((q, i) => { if (q !== p && h0.P[i]) [q.x, q.y, q.z, q.crouch] = h0.P[i]; });
+      restore = () => this.players.forEach((q, i) => { [q.x, q.y, q.z, q.crouch] = keep[i]; });
+    }
     for (let k = 0; k < n; k++) {
       const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * sp;
       const yaw = p.yaw + Math.cos(a) * r, pitch = p.pitch + p.recoil * Math.PI / 180 + Math.sin(a) * r;
       const d = fwdVec(yaw, pitch);
       const h = this.trace(p.x, ey, p.z, d[0], d[1], d[2], 200, p);
       hits.push(h);
+      if (k < 3) trs.push([+p.x.toFixed(2), +(ey - 0.12).toFixed(2), +p.z.toFixed(2), +(p.x + d[0] * h.t).toFixed(2), +(ey + d[1] * h.t).toFixed(2), +(p.z + d[2] * h.t).toFixed(2)]);
       if (h.p) {
         const zone = h.zone, dmg0 = W.dmg[zone === 'head' ? 0 : zone === 'body' ? 1 : 2];
         let dmg = dmg0; if (W.falloff && h.t > W.falloff) dmg *= Math.max(0.3, 1 - (h.t - W.falloff) / 20);
         this.hurt(h.p, dmg, p, zone, G.id);
       }
-      if (k < 3) this.tracers.push({ x0: p.x, y0: ey - 0.12, z0: p.z, x1: p.x + d[0] * h.t, y1: ey + d[1] * h.t, z1: p.z + d[2] * h.t, t: 0.06, owner: p.id });
     }
+    if (restore) restore();
     p.recoil = Math.min(p.recoil + W.rec * (0.6 + Math.random() * 0.5), 9);
     p.burst = Math.min(p.burst + 1, 12);
     if (W.zoom && p.zoom && W.rps < 1) p.zoom = false;
-    this.emit({ k: 'shot', id: p.id, w: G.id, x: p.x, z: p.z, hits: hits.map(h => h.p ? h.p.id : 0) });
+    for (const t of trs) this.tracers.push({ x0: t[0], y0: t[1], z0: t[2], x1: t[3], y1: t[4], z1: t[5], t: 0.06, owner: p.id });
+    this.emit({ k: 'shot', id: p.id, w: G.id, x: +p.x.toFixed(1), z: +p.z.toFixed(1), tr: trs });
     this.alertBots(p, 40);
   }
   melee(p) {
@@ -376,7 +392,6 @@ class Game {
       } else if (!p.usedPick) { if (this.pickupNear(p)) p.usedPick = true; }
     } else p.usedPick = false;
     if (!busy) { if (p.useT > 0 && this.defuseHalf && p.team !== att && p.useT >= RULES.defuseTime / 2) p.useT = RULES.defuseTime / 2; else if (!(p.team !== att && p.useT >= RULES.defuseTime / 2 && this.defuseHalf)) p.useT = 0; }
-    if (busy) this.emit({ k: 'using', id: p.id });
   }
 
   // ---------------- habilidades ----------------
