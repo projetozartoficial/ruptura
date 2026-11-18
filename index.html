@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RUPTURA — Caçadores do Abismo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="bg"></canvas>
+
+<!-- ============ MENU ============ -->
+<section id="scr-menu" class="screen active">
+  <div class="menu-wrap">
+    <div class="logo">
+      <div class="logo-crack"></div>
+      <h1>RUPTURA</h1>
+      <h2>Caçadores do Abismo</h2>
+    </div>
+    <div class="menu-box">
+      <label class="lbl">Seu nome de caçador</label>
+      <input id="in-name" maxlength="14" placeholder="Digite seu nome" autocomplete="off">
+      <button class="btn big" data-act="solo">▶ Treino contra bots</button>
+      <button class="btn big gold" data-act="host">✦ Criar sala multiplayer</button>
+      <div class="row">
+        <input id="in-code" maxlength="5" placeholder="CÓDIGO" autocomplete="off">
+        <button class="btn" data-act="join">Entrar na sala</button>
+      </div>
+      <div class="row small">
+        <span class="lbl">Conexão:</span>
+        <label class="radio"><input type="radio" name="net" value="online" checked> Online (internet)</label>
+        <label class="radio"><input type="radio" name="net" value="local"> Local (abas do mesmo PC)</label>
+      </div>
+      <div class="row">
+        <button class="btn ghost" data-act="codex">Caçadores &amp; Universo</button>
+        <button class="btn ghost" data-act="howto">Como jogar</button>
+      </div>
+      <p id="menu-msg" class="msg"></p>
+    </div>
+  </div>
+  <div class="ver">v0.1 · Modo Arena 4v4 · Arena de Vésper</div>
+</section>
+
+<!-- ============ LOBBY ============ -->
+<section id="scr-lobby" class="screen">
+  <div class="lobby">
+    <header>
+      <div>
+        <div class="lbl">SALA</div>
+        <div id="lob-code" class="code">-----</div>
+        <div id="lob-mode" class="hint"></div>
+      </div>
+      <div class="lob-title">Escolha seu time e seu caçador</div>
+      <div class="lob-actions">
+        <button class="btn ghost" data-act="leave">Sair</button>
+        <button id="btn-start" class="btn big gold" data-act="start">Começar partida</button>
+      </div>
+    </header>
+    <div class="teams">
+      <div class="team-col t0"><h3>Alvorada</h3><div id="slots0" class="slots"></div></div>
+      <div class="vs">VS</div>
+      <div class="team-col t1"><h3>Crepúsculo</h3><div id="slots1" class="slots"></div></div>
+    </div>
+    <div class="picker-title">Seu caçador <span class="hint">(não pode repetir no mesmo time · vagas vazias viram bots)</span></div>
+    <div id="picker" class="picker"></div>
+    <p id="lob-msg" class="msg"></p>
+  </div>
+</section>
+
+<!-- ============ CODEX ============ -->
+<section id="scr-codex" class="screen">
+  <div class="codex">
+    <header><h2>Caçadores &amp; Universo</h2><button class="btn ghost" data-act="back">Voltar</button></header>
+    <div id="codex-lore" class="lore"></div>
+    <div id="codex-list" class="codex-list"></div>
+  </div>
+</section>
+
+<!-- ============ COMO JOGAR ============ -->
+<section id="scr-howto" class="screen">
+  <div class="codex">
+    <header><h2>Como jogar</h2><button class="btn ghost" data-act="back">Voltar</button></header>
+    <div class="howto">
+      <div class="keys">
+        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Andar</div>
+        <div><kbd>Mouse</kbd> Mirar (todo ataque é mira manual)</div>
+        <div><kbd>Botão esq.</kbd> Ataque básico (segure)</div>
+        <div><kbd>Q</kbd> ou <kbd>Botão dir.</kbd> Habilidade 1</div>
+        <div><kbd>E</kbd> Habilidade 2</div>
+        <div><kbd>R</kbd> Habilidade suprema</div>
+        <div><kbd>Espaço</kbd> / <kbd>Shift</kbd> Esquiva rápida</div>
+        <div><kbd>Tab</kbd> Placar · <kbd>Esc</kbd> Menu · <kbd>M</kbd> Som</div>
+      </div>
+      <ul>
+        <li><b>Arena 4v4:</b> dois esquadrões de 4 caçadores. Vence o round o time que eliminar todos os inimigos. Quem vencer <b>3 rounds</b> leva a partida.</li>
+        <li><b>Visão:</b> você só vê inimigos que estão na linha de visão do seu time. Paredes, árvores e cristais bloqueiam a visão.</li>
+        <li><b>Noite:</b> os rounds pares acontecem à noite. Aí a visão vira um <b>cone</b> na direção da sua mira, com um círculo pequeno em volta.</li>
+        <li><b>Névoa Rubra:</b> depois de ~30s a névoa começa a fechar o mapa. Ficar fora dela causa dano.</li>
+        <li><b>Reviver:</b> quem cai deixa a <b>alma</b> no chão. Fique perto dela por 3,5s para reviver o aliado com 40% de vida.</li>
+        <li><b>Classes:</b> Lutador (dano), Iniciador (abre lutas), Controlador (zonas), Protetor (cura), Vanguarda (tanque). Monte um time equilibrado!</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FIM ============ -->
+<section id="scr-end" class="screen">
+  <div class="end">
+    <h1 id="end-title">VITÓRIA</h1>
+    <div id="end-sub" class="hint"></div>
+    <table id="end-table"></table>
+    <div class="row center">
+      <button class="btn" data-act="menu">Menu</button>
+      <button id="btn-again" class="btn gold big" data-act="again">Jogar de novo</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ JOGO ============ -->
+<section id="scr-game" class="screen">
+  <div id="hud">
+    <div class="top">
+      <div class="score">
+        <div class="sc t0"><span id="sc0">0</span><small>ALVORADA</small></div>
+        <div class="mid"><div id="hud-round">ROUND 1</div><div id="hud-timer">0:00</div></div>
+        <div class="sc t1"><small>CREPÚSCULO</small><span id="sc1">0</span></div>
+      </div>
+      <div class="roster"><div id="ros0" class="ros"></div><div id="ros1" class="ros"></div></div>
+    </div>
+    <div id="hud-code" class="hud-code"></div>
+    <div id="feed" class="feed"></div>
+    <div id="banner" class="banner"></div>
+    <div class="bottom">
+      <div class="me">
+        <canvas id="me-port" width="84" height="84"></canvas>
+        <div class="me-info">
+          <div id="me-name" class="me-name"></div>
+          <div class="hpbar"><div id="me-hp" class="hp"></div><div id="me-sh" class="sh"></div><span id="me-hptxt"></span></div>
+        </div>
+      </div>
+      <div id="abil" class="abil"></div>
+    </div>
+    <canvas id="minimap" width="240" height="160"></canvas>
+    <div id="spectate" class="spectate"></div>
+  </div>
+  <div id="tabboard" class="tabboard"></div>
+  <div id="pause" class="pause">
+    <div class="pause-box">
+      <h2>Pausa</h2>
+      <button class="btn" data-act="resume">Continuar</button>
+      <button class="btn" data-act="sound">Som: ligado</button>
+      <button class="btn ghost" data-act="quit">Sair da partida</button>
+    </div>
+  </div>
+</section>
+
+<script src="js/data.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/render.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/net.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
