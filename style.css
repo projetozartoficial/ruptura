@@ -225,7 +225,7 @@ kbd{display:inline-block;background:#262b4d;border:1px solid #4a518a;border-bott
 .modal-box h2{font-family:Cinzel,serif}
 .nick-row{display:flex;align-items:center;gap:8px}
 .nick-row #nk-name{flex:1}
-.nick-row #nk-tag{width:110px;text-transform:uppercase;letter-spacing:2px;text-align:center}
+.nick-row #nk-tag{width:110px;letter-spacing:2px;text-align:center}
 .hash{font-size:28px;font-weight:800;color:var(--gold)}
 .nk-prev{font-family:Cinzel,serif;font-size:24px;text-align:center;min-height:30px}
 .nk-prev small{color:var(--dim);font-family:Rajdhani,sans-serif;font-size:18px}

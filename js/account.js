@@ -201,7 +201,7 @@ const Account = {
   get fullId() { const p = this.profile; return p.tag ? `${p.name}#${p.tag}` : p.name; },
   // reserva o ID Nome#TAG (único, sem diferenciar maiúsculas)
   async claimNick(name, tag) {
-    name = String(name || '').trim(); tag = String(tag || '').trim().toUpperCase();
+    name = String(name || '').trim(); tag = String(tag || '').trim();
     if (!NICK_RE.test(name)) throw new Error('O nome precisa ter de 3 a 14 caracteres (letras, números ou _).');
     if (!TAG_RE.test(tag)) throw new Error('A TAG precisa ter de 3 a 5 letras ou números.');
     const key = nickKey(name, tag), uid = this.user.uid, P = this.profile;

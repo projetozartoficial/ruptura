@@ -834,11 +834,11 @@ function openNick(forced) {
   setTimeout(() => $('#nk-name').focus(), 50);
 }
 function nickPreview() {
-  const n = $('#nk-name').value.trim(), t = $('#nk-tag').value.trim().toUpperCase();
+  const n = $('#nk-name').value.trim(), t = $('#nk-tag').value.trim();
   $('#nk-prev').innerHTML = n ? `${esc(n)} <small>#${esc(t)}</small>` : '';
 }
 $('#nk-name').addEventListener('input', nickPreview);
-$('#nk-tag').addEventListener('input', () => { $('#nk-tag').value = $('#nk-tag').value.replace(/[^A-Za-z0-9]/g, '').toUpperCase(); nickPreview(); });
+$('#nk-tag').addEventListener('input', () => { $('#nk-tag').value = $('#nk-tag').value.replace(/[^A-Za-z0-9]/g, ''); nickPreview(); });
 async function confirmNick() {
   msg('#nk-msg', 'Salvando...');
   try { await Account.claimNick($('#nk-name').value, $('#nk-tag').value); $('#nick-modal').classList.remove('show'); msg('#nk-msg', ''); }
