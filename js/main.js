@@ -6,6 +6,7 @@ const $$ = s => document.querySelectorAll(s);
 const BOT_NAMES = ['Eco', 'Vulto', 'Faísca', 'Garoa', 'Breu', 'Ônix', 'Sina', 'Lasca', 'Rajada', 'Cinza', 'Neblina', 'Trovo'];
 const ICONS = {
   brasa: ['✹', '✺', '➤', '☄'], corvo: ['➶', '⛓', '✧', '☾'], mare: ['◉', '◌', '▥', '≋'], lumi: ['✦', '⛉', '✚', '☀'], rocha: ['⚒', '⚡', '⛨', '⛰'],
+  lamina: ['〉', '➹', '◈', '✵'], trovao: ['ϟ', '⇶', '⌁', '☈'], vinha: ['❦', '⚘', '✿', '♣'], sino: ['〰', '⇄', '◍', '♫'], ancora: ['⚓', '⥅', '⛊', '⛓'],
 };
 const MODE_NAME = { training: 'Treino', standard: 'Partida padrão', ranked: 'Ranqueada' };
 
@@ -356,7 +357,10 @@ function fillBots(slots) {
   const names = BOT_NAMES.slice().sort(() => Math.random() - 0.5);
   const hm = S.filter(s => s.kind === 'human'), avg = hm.length ? Math.round(hm.reduce((a, s) => a + (s.mmr || 1000), 0) / hm.length) : 1000;
   let bid = 100;
-  for (let i = 0; i < 8; i++) if (S[i].kind === 'empty') S[i] = { kind: 'bot', id: bid++, name: names.pop() + ' [bot]', hunter: freeHunter(S, i < 4 ? 0 : 1), mmr: avg };
+  for (let i = 0; i < 8; i++) if (S[i].kind === 'empty') {
+    const used = teamHunters(S, i < 4 ? 0 : 1), free = HUNTER_IDS.filter(h => !used.has(h));
+    S[i] = { kind: 'bot', id: bid++, name: names.pop() + ' [bot]', hunter: free[(Math.random() * free.length) | 0], mmr: avg };
+  }
   return S;
 }
 function hostStart() {
@@ -491,7 +495,11 @@ function handleEvents(evs, S) {
       case 'shield': if (e.id === me.id) SFX.play('shield'); break;
       case 'block': if (near(e.x, e.y)) SFX.play('block', 60); break;
       case 'hook': SFX.play('hook'); break;
-      case 'aurora': if (near(e.x, e.y)) SFX.play('aurora'); break;
+      case 'aurora': case 'ward': if (near(e.x, e.y)) SFX.play('aurora'); break;
+      case 'bell': if (near(e.x, e.y)) SFX.play('shield'); break;
+      case 'zap': if (near(e.x1, e.y1)) SFX.play('hit', 80); break;
+      case 'parry': if (near(e.x, e.y)) SFX.play('block'); break;
+      case 'pull': if (near(e.x, e.y)) SFX.play('hook'); break;
       case 'revive': { const p = pl(e.id); SFX.play('revive'); if (p) feed(`${nameTag(p, me)} foi revivido`); break; }
       case 'death': {
         const v = pl(e.id), k = pl(e.by);
@@ -705,7 +713,8 @@ function buildCodex() {
 // ------------------------------------------------------------------
 function newDemo() {
   const S = [];
-  for (let i = 0; i < 8; i++) S.push({ kind: 'bot', id: 200 + i, name: BOT_NAMES[i], hunter: HUNTER_IDS[(i + (i >= 4 ? 2 : 0)) % 5] });
+  const pool = HUNTER_IDS.slice().sort(() => Math.random() - 0.5);
+  for (let i = 0; i < 8; i++) S.push({ kind: 'bot', id: 200 + i, name: BOT_NAMES[i], hunter: pool[i] });
   App.demo = new Sim(S, { mode: 'standard' }); App.demo.drainEvents(); App.demoT = 0;
 }
 function demoFrame(dt) {
@@ -783,7 +792,7 @@ function gameFrame(dt) {
         pred = true;
         let mx = inp.mx, my = inp.my; const ml = Math.hypot(mx, my); if (ml > 1) { mx /= ml; my /= ml; }
         let sp = HUNTERS[me.hunter].speed;
-        if (me.slowT) sp *= 0.7; if (me.spdT) sp *= 1.25; if (me.huntT) sp *= 1.35; if (me.bastionT) sp *= 0.8;
+        if (me.slowT) sp *= 0.7; if (me.spdT) sp *= 1.25; if (me.huntT) sp *= 1.35; if (me.bastionT) sp *= 0.8; if (me.spinT) sp *= 1.2; if (me.rootT) sp = 0;
         me.pvx = me.pvx || 0; me.pvy = me.pvy || 0;
         const k = 1 - Math.exp(-dt * 18);
         me.pvx += (mx * sp - me.pvx) * k; me.pvy += (my * sp - me.pvy) * k;

@@ -1,6 +1,6 @@
 # RUPTURA — Caçadores do Abismo
 
-Hero shooter isométrico em navegador: **Arena 4v4**, WASD + mira no mouse, 5 caçadores (Lutador, Iniciador, Controlador, Protetor e Vanguarda), multiplayer online com bots completando as vagas, contas Google e **Ranqueada** (Bronze → Champion).
+Hero shooter isométrico em navegador: **Arena 4v4**, WASD + mira no mouse, 10 caçadores, 2 por classe (Lutador, Iniciador, Controlador, Protetor e Vanguarda), multiplayer online com bots completando as vagas, contas Google e **Ranqueada** (Bronze → Champion).
 
 ## Jogar
 Abra o site do GitHub Pages deste repositório. O multiplayer online usa PeerJS (P2P, gratuito): quem cria a sala vira o "servidor" da partida.

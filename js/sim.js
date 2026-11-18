@@ -71,7 +71,7 @@ class Sim {
         x: 0, y: 0, vx: 0, vy: 0, z: 0, aim: team ? Math.PI : 0, r: H.r,
         hp: H.hp, maxHp: H.hp, shield: 0, shieldT: 0, alive: true,
         cd: { basic: 0, q: 0, e: 0, r: 0, dash: 0 },
-        stun: 0, slowT: 0, slowAmt: 0, spdT: 0, spdAmt: 0, huntT: 0, bastionT: 0,
+        stun: 0, slowT: 0, slowAmt: 0, spdT: 0, spdAmt: 0, huntT: 0, bastionT: 0, rootT: 0, parryT: 0, wardT: 0, spinT: 0, spinAcc: 0, dashHit: null,
         dashT: 0, dvx: 0, dvy: 0, trail: false, trailAcc: 0, leap: null, invuln: 0,
         kills: 0, deaths: 0, dmg: 0, heal: 0, revive: 0, soulX: 0, soulY: 0,
         lastHitBy: null, lastHitT: -99, tickDmg: 0, tickHeal: 0, tickT: 0,
@@ -116,8 +116,9 @@ class Sim {
       Object.assign(p, {
         x: sp.x, y: sp.y, vx: 0, vy: 0, z: 0, aim: p.team ? Math.PI : 0, hp: p.maxHp, shield: 0, shieldT: 0, alive: true,
         stun: 0, slowT: 0, spdT: 0, huntT: 0, bastionT: 0, dashT: 0, leap: null, invuln: 0, revive: 0, trail: false,
+        rootT: 0, parryT: 0, wardT: 0, spinT: 0, dashHit: null,
       });
-      p.cd = { basic: 0, q: 0, e: 0, r: 18, dash: 0 };
+      p.cd = { basic: 0, q: 0, e: 0, r: 18, dash: 0 }; p.dashHit = null; p.spinAcc = 0;
     }
     this.storm.r = 1500;
     this.phase = 'countdown'; this.phaseT = 3; this.fightT = 0;
@@ -207,7 +208,9 @@ class Sim {
         if (z.heal && ally) this.heal(p, z.heal * dt, this.byId(z.owner), true);
         if (z.dps && !ally) this.damage(p, z.dps * dt, this.byId(z.owner), true);
         if (z.slow && !ally) { p.slowT = Math.max(p.slowT, 0.15); p.slowAmt = Math.max(p.slowAmt, z.slow); }
+        if (z.root && !ally) { z.rooted = z.rooted || new Set(); if (!z.rooted.has(p.id)) { z.rooted.add(p.id); p.rootT = Math.max(p.rootT, z.root); this.ev({ k: 'root', id: p.id }); } }
       }
+      if (z.t <= 0 && z.onEnd) ZONE_END[z.onEnd](this, z);
     }
     this.zones = this.zones.filter(z => z.t > 0);
     let wallsChanged = false;
@@ -227,6 +230,8 @@ class Sim {
     p.huntT = Math.max(0, p.huntT - dt);
     p.bastionT = Math.max(0, p.bastionT - dt);
     p.invuln = Math.max(0, p.invuln - dt);
+    p.rootT = Math.max(0, p.rootT - dt); p.parryT = Math.max(0, p.parryT - dt);
+    if (p.wardT > 0) { p.wardT -= dt; if (p.alive) this.heal(p, 18 * dt, null, true); }
     if (p.shieldT > 0) { p.shieldT -= dt; if (p.shieldT <= 0) p.shield = 0; }
     // emite números acumulados de dano/cura contínuos
     p.tickT -= dt;
@@ -262,11 +267,19 @@ class Sim {
       p.dashT -= dt;
       const ox = p.x, oy = p.y;
       p.x += p.dvx * dt; p.y += p.dvy * dt;
+      if (p.dashHit) {
+        for (const t of this.players) {
+          if (!t.alive || t.team === p.team || p.dashHit.hit.has(t.id) || dist(p.x, p.y, t.x, t.y) > p.r + t.r + 8) continue;
+          p.dashHit.hit.add(t.id); this.damage(t, p.dashHit.dmg, p);
+          if (p.dashHit.stun) t.stun = Math.max(t.stun, p.dashHit.stun);
+          if (p.dashHit.stop) { p.dashT = 0; break; }
+        }
+      }
       if (p.trail) {
         p.trailAcc += dist(ox, oy, p.x, p.y);
         if (p.trailAcc > 42) { p.trailAcc = 0; this.zones.push({ id: this.nextId++, type: 'fire', x: p.x, y: p.y, r: 44, t: 2.6, T: 2.6, team: p.team, owner: p.id, dps: 42 }); }
       }
-      if (p.dashT <= 0) { p.trail = false; p.dvx = p.dvy = 0; }
+      if (p.dashT <= 0) { p.trail = false; p.dvx = p.dvy = 0; p.dashHit = null; }
     } else if (p.stun <= 0 && this.phase === 'fight') {
       let mx = inp.mx, my = inp.my;
       const ml = Math.hypot(mx, my); if (ml > 1) { mx /= ml; my /= ml; }
@@ -275,11 +288,17 @@ class Sim {
       if (p.spdT > 0) sp *= 1 + p.spdAmt;
       if (p.huntT > 0) sp *= 1.35;
       if (p.bastionT > 0) sp *= 0.8;
+      if (p.spinT > 0) sp *= 1.2;
+      if (p.rootT > 0) { mx = 0; my = 0; }
       const k = 1 - Math.exp(-dt * 18);
       p.vx += (mx * sp - p.vx) * k; p.vy += (my * sp - p.vy) * k;
       p.x += p.vx * dt; p.y += p.vy * dt;
     } else { p.vx *= 0.8; p.vy *= 0.8; }
     if (!p.leap) this.collide(p);
+    if (p.spinT > 0) {
+      p.spinT -= dt; p.spinAcc += dt;
+      if (p.spinAcc >= 0.25) { p.spinAcc -= 0.25; for (const t of this.enemiesIn(p.x, p.y, 170, p.team)) this.damage(t, 30, p); this.ev({ k: 'spin', id: p.id }); }
+    }
 
     // ações
     if (p.stun > 0 || p.leap || this.phase !== 'fight') return;
@@ -401,14 +420,19 @@ class Sim {
   }
   projEnd(pr, owner, wall, expire) {
     if (pr.kind === 'fireball') { this.brasaBoom(pr.x, pr.y, owner, pr.team); return; }
+    if (pr.kind === 'grapple' && wall && owner && owner.alive) { dashTo(owner, pr.x - Math.cos(pr.ang) * (owner.r + 6), pr.y - Math.sin(pr.ang) * (owner.r + 6), 0.25); this.ev({ k: 'spark', x: pr.x, y: pr.y, c: 'hook' }); return; }
     if (wall || !expire) this.ev({ k: 'spark', x: pr.x, y: pr.y, c: pr.kind });
   }
 
   // ---------- dano e cura ----------
   damage(t, amt, src, tick) {
     if (!t.alive || t.invuln > 0 || this.phase !== 'fight') return 0;
+    if (t.parryT > 0 && !tick && src) {
+      t.spdT = 1.5; t.spdAmt = 0.3; this.ev({ k: 'parry', id: t.id, x: t.x, y: t.y }); return 0;
+    }
     if (src && src.huntT > 0 && !tick) amt *= 1.4;
     if (t.bastionT > 0) amt *= 0.5;
+    if (t.wardT > 0) amt *= 0.6;
     if (!tick) amt = Math.round(amt);
     let a = amt;
     if (t.shield > 0) { const s = Math.min(t.shield, a); t.shield -= s; a -= s; }
@@ -574,5 +598,97 @@ const HUNTER_LOGIC = {
     },
   },
 };
+
+
+// ------------------------------------------------------------------
+//  Caçadores novos (v0.3)
+// ------------------------------------------------------------------
+function dashTo(p, x, y, T) {
+  const d = dist(p.x, p.y, x, y); if (d < 4) return;
+  p.dashT = T; p.dvx = (x - p.x) / T; p.dvy = (y - p.y) / T; p.trail = false;
+}
+const ZONE_END = {
+  strike(sim, z) {
+    const o = sim.byId(z.owner);
+    for (const t of sim.enemiesIn(z.x, z.y, z.r, z.team)) { sim.damage(t, 130, o); t.stun = Math.max(t.stun, 1.2); }
+    sim.ev({ k: 'boom', x: z.x, y: z.y, r: z.r, c: 'lightning' });
+  },
+  seed(sim, z) {
+    const o = sim.byId(z.owner);
+    for (const t of sim.enemiesIn(z.x, z.y, z.r, z.team)) { sim.damage(t, 75, o); t.slowT = Math.max(t.slowT, 2); t.slowAmt = Math.max(t.slowAmt, 0.4); }
+    sim.ev({ k: 'boom', x: z.x, y: z.y, r: z.r, c: 'bloom' });
+  },
+};
+Object.assign(PROJ_HIT, {
+  bolt(sim, pr, o, t) {
+    sim.damage(t, pr.dmg, o);
+    let best = null, bd = 230;
+    for (const e of sim.players) { if (!e.alive || e.team === pr.team || e === t) continue; const d = dist(e.x, e.y, t.x, t.y); if (d < bd) { bd = d; best = e; } }
+    if (best) { sim.damage(best, 14, o); sim.ev({ k: 'zap', x1: t.x, y1: t.y, x2: best.x, y2: best.y }); }
+  },
+  roots(sim, pr, o, t) { sim.damage(t, pr.dmg, o); t.rootT = Math.max(t.rootT, 1.4); sim.ev({ k: 'root', id: t.id }); },
+  anchor(sim, pr, o, t) { sim.damage(t, pr.dmg, o); t.slowT = Math.max(t.slowT, 1); t.slowAmt = Math.max(t.slowAmt, 0.3); },
+  grapple(sim, pr, o, t) {
+    sim.damage(t, pr.dmg, o); t.stun = Math.max(t.stun, 0.6);
+    if (o && o.alive) { const a = Math.atan2(t.y - o.y, t.x - o.x), d = dist(o.x, o.y, t.x, t.y) - (o.r + t.r + 8); if (d > 0) dashTo(o, o.x + Math.cos(a) * d, o.y + Math.sin(a) * d, 0.25); }
+    sim.ev({ k: 'hook', id: t.id, by: o ? o.id : 0 });
+  },
+});
+Object.assign(HUNTER_LOGIC, {
+  lamina: {
+    basic(sim, p) { sim.shoot(p, { kind: 'wind', speed: 950, range: 330, r: 16, dmg: 40, pierce: true }); sim.ev({ k: 'shot', id: p.id, h: 'lamina' }); },
+    q(sim, p) { p.dashT = 0.2; p.dvx = Math.cos(p.aim) * 1400; p.dvy = Math.sin(p.aim) * 1400; p.dashHit = { dmg: 55, hit: new Set() }; },
+    e(sim, p) { p.parryT = 1.0; },
+    r(sim, p) { p.spinT = 2.5; p.spinAcc = 0.2; },
+  },
+  trovao: {
+    basic(sim, p) { sim.shoot(p, { kind: 'bolt', speed: 1050, range: 600, r: 7, dmg: 28 }); sim.ev({ k: 'shot', id: p.id, h: 'trovao' }); },
+    q(sim, p) { p.dashT = 0.28; p.dvx = Math.cos(p.aim) * 1350; p.dvy = Math.sin(p.aim) * 1350; p.dashHit = { dmg: 60, stun: 0.8, stop: true, hit: new Set() }; },
+    e(sim, p) { sim.zones.push({ id: sim.nextId++, type: 'static', x: p.x, y: p.y, r: 180, t: 3, T: 3, team: p.team, owner: p.id, dps: 22, slow: 0.3 }); },
+    r(sim, p) { const [x, y] = sim.aimPoint(p, 700); sim.zones.push({ id: sim.nextId++, type: 'strike', x, y, r: 220, t: 0.9, T: 0.9, team: p.team, owner: p.id, onEnd: 'strike' }); },
+  },
+  vinha: {
+    basic(sim, p) { sim.shoot(p, { kind: 'thorn', speed: 850, range: 680, r: 6, dmg: 32 }); sim.ev({ k: 'shot', id: p.id, h: 'vinha' }); },
+    q(sim, p) { sim.shoot(p, { kind: 'roots', speed: 950, range: 620, r: 18, dmg: 40 }); },
+    e(sim, p) { const [x, y] = sim.aimPoint(p, 600); sim.zones.push({ id: sim.nextId++, type: 'seed', x, y, r: 150, t: 1, T: 1, team: p.team, owner: p.id, onEnd: 'seed' }); },
+    r(sim, p) { const [x, y] = sim.aimPoint(p, 600); sim.zones.push({ id: sim.nextId++, type: 'grove', x, y, r: 260, t: 4.5, T: 4.5, team: p.team, owner: p.id, heal: 25, dps: 20, root: 1.0 }); },
+  },
+  sino: {
+    basic(sim, p) { sim.shoot(p, { kind: 'sound', speed: 850, range: 520, r: 16, dmg: 26, pierce: true }); sim.ev({ k: 'shot', id: p.id, h: 'sino' }); },
+    q(sim, p) {
+      let best = null, bd = 1e9;
+      for (const a of sim.players) { if (!a.alive || a.team !== p.team || a === p || dist(a.x, a.y, p.x, p.y) > 520) continue; const d = dist(a.x, a.y, p.input.ax, p.input.ay); if (d < bd) { bd = d; best = a; } }
+      if (!best) return false;
+      const a0 = Math.atan2(p.y - best.y, p.x - best.x);
+      let tx = best.x, ty = best.y;
+      for (let k = 0; k < 8; k++) { const a = a0 + k * 0.8, x = best.x + Math.cos(a) * (best.r + p.r + 6), y = best.y + Math.sin(a) * (best.r + p.r + 6); if (sim.freeSpot(x, y, p.r)) { tx = x; ty = y; break; } }
+      const ox = p.x, oy = p.y; p.x = tx; p.y = ty; p.dashT = 0; p.vx = p.vy = 0;
+      best.shield = Math.max(best.shield, 110); best.shieldT = 3;
+      sim.ev({ k: 'blink', x1: ox, y1: oy, x2: tx, y2: ty, c: 'gold' }); sim.ev({ k: 'shield', id: best.id, from: p.id });
+    },
+    e(sim, p) {
+      for (const t of sim.enemiesIn(p.x, p.y, 180, p.team)) { sim.damage(t, 30, p); const a = Math.atan2(t.y - p.y, t.x - p.x); t.dashT = 0.22; t.dvx = Math.cos(a) * 1000; t.dvy = Math.sin(a) * 1000; t.trail = false; t.dashHit = null; }
+      for (const a of sim.players) if (a.alive && a.team === p.team && dist(a.x, a.y, p.x, p.y) < 180 + a.r) sim.heal(a, 45, p);
+      sim.ev({ k: 'bell', x: p.x, y: p.y });
+    },
+    r(sim, p) {
+      for (const a of sim.players) if (a.alive && a.team === p.team && dist(a.x, a.y, p.x, p.y) < 650) a.wardT = 4;
+      sim.ev({ k: 'ward', x: p.x, y: p.y });
+    },
+  },
+  ancora: {
+    basic(sim, p) { sim.shoot(p, { kind: 'anchor', speed: 900, range: 280, r: 14, dmg: 44 }); sim.ev({ k: 'swing', id: p.id, a: p.aim, soft: 1 }); },
+    q(sim, p) { sim.shoot(p, { kind: 'grapple', speed: 1400, range: 600, r: 12, dmg: 40 }); },
+    e(sim, p) { p.shield = Math.max(p.shield, 230); p.shieldT = 3; sim.ev({ k: 'shield', id: p.id, from: p.id }); },
+    r(sim, p) {
+      for (const t of sim.enemiesIn(p.x, p.y, 340, p.team)) {
+        sim.damage(t, 70, p); t.stun = Math.max(t.stun, 1.0);
+        const a = Math.atan2(p.y - t.y, p.x - t.x), d = dist(p.x, p.y, t.x, t.y) - (p.r + t.r + 10);
+        if (d > 0) { t.dashT = 0.22; t.dvx = Math.cos(a) * d / 0.22; t.dvy = Math.sin(a) * d / 0.22; t.trail = false; t.dashHit = null; }
+      }
+      sim.ev({ k: 'pull', x: p.x, y: p.y });
+    },
+  },
+});
 
 if (typeof module !== 'undefined') module.exports = { Sim };

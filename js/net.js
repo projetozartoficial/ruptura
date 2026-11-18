@@ -136,15 +136,15 @@ const Transport = {
 // ------------------------------------------------------------------
 //  Codificação dos snapshots
 // ------------------------------------------------------------------
-const PKINDS = ['ember', 'dagger', 'orb', 'light', 'fireball', 'hook', 'fissure', 'wave'];
-const ZKINDS = ['fire', 'burn', 'pool', 'sanct'];
+const PKINDS = ['ember', 'dagger', 'orb', 'light', 'fireball', 'hook', 'fissure', 'wave', 'wind', 'bolt', 'thorn', 'roots', 'sound', 'anchor', 'grapple'];
+const ZKINDS = ['fire', 'burn', 'pool', 'sanct', 'static', 'strike', 'seed', 'grove'];
 const r1 = v => Math.round(v * 10) / 10, r2 = v => Math.round(v * 100) / 100;
 
 function encodeSnap(sim, events) {
   return {
     t: 's', ph: sim.phase, pt: r2(sim.phaseT), rd: sim.round, sc: sim.score, ng: sim.night ? 1 : 0, ft: r2(sim.fightT), st: Math.round(sim.storm.r), w: sim.winner,
     P: sim.players.map(p => [p.id, r1(p.x), r1(p.y), r2(p.aim), Math.round(p.hp), Math.round(p.shield), p.alive ? 1 : 0,
-      (p.slowT > 0 ? 1 : 0) | (p.huntT > 0 ? 2 : 0) | (p.bastionT > 0 ? 4 : 0) | (p.spdT > 0 ? 8 : 0) | (p.invuln > 0 ? 16 : 0) | (p.leap ? 32 : 0) | (p.dashT > 0 ? 64 : 0),
+      (p.slowT > 0 ? 1 : 0) | (p.huntT > 0 ? 2 : 0) | (p.bastionT > 0 ? 4 : 0) | (p.spdT > 0 ? 8 : 0) | (p.invuln > 0 ? 16 : 0) | (p.leap ? 32 : 0) | (p.dashT > 0 ? 64 : 0) | (p.rootT > 0 ? 128 : 0) | (p.parryT > 0 ? 256 : 0) | (p.wardT > 0 ? 512 : 0) | (p.spinT > 0 ? 1024 : 0),
       Math.round(p.z), r2(p.stun), r1(p.cd.q), r1(p.cd.e), r1(p.cd.r), r1(p.cd.dash), r2(p.cd.basic),
       p.kills, p.deaths, Math.round(p.dmg), Math.round(p.heal), r2(p.revive), Math.round(p.soulX), Math.round(p.soulY), Math.round(p.vx), Math.round(p.vy)]),
     J: sim.projectiles.map(pr => [pr.id, PKINDS.indexOf(pr.kind), r1(pr.x), r1(pr.y), Math.round(pr.vx), Math.round(pr.vy), pr.team, pr.owner, Math.round(pr.trav)]),
@@ -179,7 +179,7 @@ class ClientState {
       if (p.id !== myId) p.aim = a[3];
       p.hp = a[4]; p.shield = a[5]; p.alive = !!a[6];
       const f = a[7];
-      p.slowT = f & 1 ? 1 : 0; p.huntT = f & 2 ? 1 : 0; p.bastionT = f & 4 ? 1 : 0; p.spdT = f & 8 ? 1 : 0; p.invuln = f & 16 ? 1 : 0; p.leap = f & 32 ? {} : null; p.dashing = !!(f & 64);
+      p.slowT = f & 1 ? 1 : 0; p.huntT = f & 2 ? 1 : 0; p.bastionT = f & 4 ? 1 : 0; p.spdT = f & 8 ? 1 : 0; p.invuln = f & 16 ? 1 : 0; p.leap = f & 32 ? {} : null; p.dashing = !!(f & 64); p.rootT = f & 128 ? 1 : 0; p.parryT = f & 256 ? 1 : 0; p.wardT = f & 512 ? 1 : 0; p.spinT = f & 1024 ? 1 : 0;
       p.z = a[8]; p.stun = a[9];
       p.cd = { q: a[10], e: a[11], r: a[12], dash: a[13], basic: a[14] };
       p.kills = a[15]; p.deaths = a[16]; p.dmg = a[17]; p.heal = a[18]; p.revive = a[19]; p.soulX = a[20]; p.soulY = a[21]; p.vx = a[22]; p.vy = a[23];

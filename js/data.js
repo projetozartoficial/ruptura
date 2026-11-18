@@ -79,7 +79,7 @@ const HUNTERS = {
   },
   rocha: {
     nome: 'Rocha', titulo: 'O Muro de Vésper', classe: 'vanguarda',
-    hp: 820, speed: 212, r: 26,
+    hp: 820, speed: 212, r: 26, big: 1.18,
     cores: { pele: '#9c7b63', roupa: '#5d6470', roupa2: '#353a43', detalhe: '#f2a33a', cabelo: '#2a2a2a', arma: '#7b828e' },
     lore: 'Tauro Rocha foi pedreiro nas fundações das ilhas, preso por correntes de Éter ao monólito central. Quando o monólito o escolheu, sua pele virou pedra. Ele não fala muito, mas nenhum aliado cai enquanto ele estiver de pé.',
     habilidades: {
@@ -87,6 +87,66 @@ const HUNTERS = {
       q: { nome: 'Fenda Sísmica', cd: 8, desc: 'Racha o chão em linha reta atordoando todos atingidos.' },
       e: { nome: 'Bastião', cd: 11, desc: 'Ergue o escudo: -50% de dano e bloqueia tiros vindos da frente.' },
       r: { nome: 'Avalanche', cd: 45, desc: 'Salta até a mira e esmaga a área, atordoando todos.' },
+    },
+  },
+  lamina: {
+    nome: 'Lâmina', titulo: 'O Duelista do Vento', classe: 'lutador',
+    hp: 560, speed: 240, r: 22,
+    cores: { pele: '#d9b08c', roupa: '#2f5d8a', roupa2: '#1b2f45', detalhe: '#9fe3ff', cabelo: '#eef0f6', arma: '#cfd8e6' },
+    lore: 'Ren Sorai treinou nos Picos Uivantes, ilhas onde o vento nunca para. Diz que sua espada corta o próprio ar e que o vento corta por ele. Luta para provar que a velha Escola do Vento ainda tem um mestre de pé.',
+    habilidades: {
+      basico: { nome: 'Corte de Vento', cd: 0.45, desc: 'Lança uma lâmina de vento curta que atravessa vários inimigos.' },
+      q: { nome: 'Rajada Cortante', cd: 7, desc: 'Avança cortando todos no caminho.' },
+      e: { nome: 'Postura Espelho', cd: 10, desc: 'Por 1s bloqueia todo o dano. Se for atingido, ganha velocidade.' },
+      r: { nome: 'Ciclone de Aço', cd: 42, desc: 'Gira por 2,5s cortando tudo em volta e andando mais rápido.' },
+    },
+  },
+  trovao: {
+    nome: 'Trovão', titulo: 'O Arauto da Tempestade', classe: 'iniciador',
+    hp: 500, speed: 246, r: 22,
+    cores: { pele: '#b07a55', roupa: '#3a3f8f', roupa2: '#22254f', detalhe: '#ffe14a', cabelo: '#ffe14a', arma: '#ffe14a' },
+    lore: 'Kaito Raio era um para-raios vivo nas torres de Éter de Zênite. Um dia o raio não passou por ele: ficou. Agora ele corre na frente do esquadrão e abre as lutas antes que o inimigo veja o clarão.',
+    habilidades: {
+      basico: { nome: 'Faísca', cd: 0.36, desc: 'Raio que salta para um segundo inimigo próximo.' },
+      q: { nome: 'Investida Trovejante', cd: 9, desc: 'Avança e atordoa o primeiro inimigo que atingir.' },
+      e: { nome: 'Campo Estático', cd: 11, desc: 'Cria um campo elétrico em volta que lentifica e fere.' },
+      r: { nome: 'Céu Partido', cd: 45, desc: 'Marca uma área: um raio cai depois de um instante e atordoa todos.' },
+    },
+  },
+  vinha: {
+    nome: 'Vinha', titulo: 'A Guardiã do Bosque', classe: 'controlador',
+    hp: 480, speed: 228, r: 21,
+    cores: { pele: '#c9a27e', roupa: '#3f7a3a', roupa2: '#24481f', detalhe: '#ff7fb6', cabelo: '#5a3a1f', arma: '#7a5a2f' },
+    lore: 'Flora Vinha é a última druida da Ilha Jardim, que caiu no Abismo durante a Ruptura. Ela carrega as sementes que sobraram e faz a floresta brotar onde pisa, prendendo quem ameaçar o que restou.',
+    habilidades: {
+      basico: { nome: 'Espinho', cd: 0.4, desc: 'Dispara espinhos afiados.' },
+      q: { nome: 'Raízes', cd: 9, desc: 'Raízes avançam em linha e prendem o primeiro inimigo no lugar.' },
+      e: { nome: 'Semente Explosiva', cd: 9, desc: 'Planta uma semente que explode depois de 1s, ferindo e lentificando.' },
+      r: { nome: 'Floresta Viva', cd: 48, desc: 'Ergue um bosque que cura aliados e prende inimigos que entrarem.' },
+    },
+  },
+  sino: {
+    nome: 'Sino', titulo: 'O Monge do Eco', classe: 'protetor',
+    hp: 500, speed: 232, r: 21,
+    cores: { pele: '#e0b896', roupa: '#c76a1e', roupa2: '#7a3a10', detalhe: '#ffd65a', cabelo: '#3a2a20', arma: '#d8b04a' },
+    lore: 'Irmão Oto viveu cem anos no Mosteiro dos Ecos, onde os sinos tocam sozinhos quando alguém corre perigo. Quando o mosteiro silenciou, ele levou o último sino para a arena. Cada badalada sua é uma promessa de proteção.',
+    habilidades: {
+      basico: { nome: 'Onda Sonora', cd: 0.45, desc: 'Onda de som que atravessa vários inimigos.' },
+      q: { nome: 'Ressonância', cd: 10, desc: 'Salta até o aliado mais perto da mira e dá um escudo a ele.' },
+      e: { nome: 'Badalada', cd: 9, desc: 'Empurra inimigos próximos e cura aliados ao redor.' },
+      r: { nome: 'Canto Sagrado', cd: 50, desc: 'Por 4s aliados próximos recebem 40% menos dano e se curam.' },
+    },
+  },
+  ancora: {
+    nome: 'Âncora', titulo: 'A Muralha das Correntes', classe: 'vanguarda',
+    hp: 780, speed: 214, r: 25, big: 1.14,
+    cores: { pele: '#8c6a55', roupa: '#4a5a5f', roupa2: '#2a3438', detalhe: '#3fd4c0', cabelo: '#2a3a3f', arma: '#6a7680' },
+    lore: 'Brígida Âncora era mergulhadora dos portos do céu, presa por correntes para não cair no Abismo. Numa queda ela desceu fundo demais e voltou com o escafandro brilhando. Ela não teme nada que a corrente possa puxar.',
+    habilidades: {
+      basico: { nome: 'Âncora Giratória', cd: 0.6, desc: 'Arremessa a âncora a curta distância, ferindo e lentificando.' },
+      q: { nome: 'Arpão', cd: 9, desc: 'Lança o arpão: se acertar inimigo, ela voa até ele e o atordoa; se acertar parede, ela se puxa até lá.' },
+      e: { nome: 'Fortaleza', cd: 12, desc: 'Ganha um escudo enorme por 3s.' },
+      r: { nome: 'Correntes do Abismo', cd: 45, desc: 'Puxa todos os inimigos próximos para perto e os atordoa.' },
     },
   },
 };

@@ -72,8 +72,14 @@ const ROLE = {
   mare: { range: 560, aggro: 0.5 },
   lumi: { range: 540, aggro: 0.3 },
   rocha: { range: 110, aggro: 1.0 },
+  lamina: { range: 200, aggro: 1.0 },
+  trovao: { range: 380, aggro: 0.9 },
+  vinha: { range: 560, aggro: 0.5 },
+  sino: { range: 420, aggro: 0.4 },
+  ancora: { range: 180, aggro: 1.0 },
 };
-const PROJ_SPEED = { brasa: 960, corvo: 1150, mare: 760, lumi: 980, rocha: 9999 };
+const PROJ_SPEED = { brasa: 960, corvo: 1150, mare: 760, lumi: 980, rocha: 9999, lamina: 950, trovao: 1050, vinha: 850, sino: 850, ancora: 900 };
+const MELEE = { rocha: 1, ancora: 1, lamina: 1 };
 
 function botThink(sim, p, dt) {
   const inp = p.input;
@@ -107,7 +113,7 @@ function botThink(sim, p, dt) {
     const d = dist(p.x, p.y, target.x, target.y);
     const ang = Math.atan2(target.y - p.y, target.x - p.x);
     let want = role.range;
-    if (hpF < 0.3 && p.hunter !== 'rocha') want = role.range + 250;
+    if (hpF < 0.3 && !MELEE[p.hunter]) want = role.range + 250;
     if (p.hunter === 'lumi' && allies.length) {
       const hurt = allies.reduce((m, a) => (a.hp / a.maxHp < m.hp / m.maxHp ? a : m), allies[0]);
       goal = { x: hurt.x - Math.cos(ang) * 120, y: hurt.y - Math.sin(ang) * 120 };
@@ -175,7 +181,7 @@ function botThink(sim, p, dt) {
   if (!los) return;
   if (B.reactT <= 0 && !B.engaged) { B.reactT = rnd(0.15, 0.35); B.engaged = true; return; }
 
-  const range = { brasa: 740, corvo: 640, mare: 680, lumi: 700, rocha: 150 }[p.hunter];
+  const range = { brasa: 740, corvo: 640, mare: 680, lumi: 700, rocha: 150, lamina: 320, trovao: 590, vinha: 660, sino: 500, ancora: 270 }[p.hunter];
   if (d < range) inp.fire = true;
   const nearE = sim.players.filter(e => e.team !== p.team && e.alive && dist(e.x, e.y, target.x, target.y) < 220).length;
 
@@ -205,7 +211,36 @@ function botThink(sim, p, dt) {
       if (d > 260 && d < 700) inp.dash = Math.random() < 0.02;
       break;
   }
-  if (hpF < 0.3 && d < 300 && p.hunter !== 'rocha' && Math.random() < 0.05) {
+  switch (p.hunter) {
+    case 'lamina':
+      if (d < 300 && d > 80) inp.q = true;
+      if (hpF < 0.6 && d < 400) inp.e = true;
+      if (d < 220) inp.r = true;
+      break;
+    case 'trovao':
+      if (d < 370 && d > 120) inp.q = true;
+      if (d < 200) inp.e = true;
+      if (d < 680 && (nearE >= 2 || target.hp < 260)) { inp.r = true; inp.ax = target.x + target.vx * 0.7; inp.ay = target.y + target.vy * 0.7; }
+      break;
+    case 'vinha':
+      if (d < 600) inp.q = true;
+      if (d < 580) { inp.e = true; }
+      if (d < 600 && (nearE >= 2 || hpF < 0.5)) inp.r = true;
+      break;
+    case 'sino': {
+      const hurt = allies.filter(a => a.hp / a.maxHp < 0.6 && dist(a.x, a.y, p.x, p.y) < 520).sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp);
+      if (hurt.length && p.cd.q <= 0) { inp.ax = hurt[0].x; inp.ay = hurt[0].y; inp.q = true; inp.fire = false; }
+      if (d < 180 || (hurt.length && dist(p.x, p.y, hurt[0].x, hurt[0].y) < 170)) inp.e = true;
+      if (allies.concat([p]).filter(a => a.hp / a.maxHp < 0.6).length >= 2) inp.r = true;
+      break;
+    }
+    case 'ancora':
+      if (d < 560 && d > 150) inp.q = true;
+      if (hpF < 0.7 && d < 500) inp.e = true;
+      if (d < 320 && (nearE >= 2 || hpF > 0.4)) inp.r = true;
+      break;
+  }
+  if (hpF < 0.3 && d < 300 && !MELEE[p.hunter] && Math.random() < 0.05) {
     inp.dash = true; inp.mx = -Math.cos(Math.atan2(target.y - p.y, target.x - p.x)); inp.my = -Math.sin(Math.atan2(target.y - p.y, target.x - p.x));
   }
 }
