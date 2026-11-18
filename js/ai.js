@@ -25,13 +25,16 @@ const NAV = (() => {
     let [bx, by] = nearestFree(...cell(tx, ty));
     const N = GW * GH, start = ay * GW + ax, goal = by * GW + bx;
     const g = new Float32Array(N).fill(1e9), came = new Int32Array(N).fill(-1), closed = new Uint8Array(N);
-    const open = [start]; g[start] = 0;
+    g[start] = 0;
     const h = i => { const x = i % GW, y = (i / GW) | 0, dx = Math.abs(x - bx), dy = Math.abs(y - by); return (dx + dy) + (1.414 - 2) * Math.min(dx, dy); };
     const f = new Float32Array(N).fill(1e9); f[start] = h(start);
+    // fila de prioridade (heap binário)
+    const heap = [start];
+    const push = v => { heap.push(v); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (f[heap[p]] <= f[heap[i]]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = i * 2 + 1, r = l + 1; let m = i; if (l < heap.length && f[heap[l]] < f[heap[m]]) m = l; if (r < heap.length && f[heap[r]] < f[heap[m]]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
     let iter = 0;
-    while (open.length && iter++ < 4000) {
-      let bi = 0; for (let i = 1; i < open.length; i++) if (f[open[i]] < f[open[bi]]) bi = i;
-      const cur = open[bi]; open.splice(bi, 1);
+    while (heap.length && iter++ < 3000) {
+      const cur = pop();
       if (cur === goal) break;
       if (closed[cur]) continue; closed[cur] = 1;
       const cx = cur % GW, cy = (cur / GW) | 0;
@@ -43,7 +46,7 @@ const NAV = (() => {
         if (block[ni] || closed[ni]) continue;
         if (dx && dy && (block[cy * GW + nx] || block[ny * GW + cx])) continue;
         const ng = g[cur] + (dx && dy ? 1.414 : 1);
-        if (ng < g[ni]) { g[ni] = ng; f[ni] = ng + h(ni); came[ni] = cur; open.push(ni); }
+        if (ng < g[ni]) { g[ni] = ng; f[ni] = ng + h(ni); came[ni] = cur; push(ni); }
       }
     }
     if (came[goal] < 0 && goal !== start) return null;

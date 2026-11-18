@@ -21,10 +21,12 @@
       <h2>Caçadores do Abismo</h2>
     </div>
     <div class="menu-box">
+      <div id="acct" class="acct"></div>
       <label class="lbl">Seu nome de caçador</label>
       <input id="in-name" maxlength="14" placeholder="Digite seu nome" autocomplete="off">
       <button class="btn big" data-act="solo">▶ Treino contra bots</button>
-      <button class="btn big gold" data-act="host">✦ Criar sala multiplayer</button>
+      <button class="btn big" data-act="host">⚔ Partida padrão com amigos</button>
+      <button id="btn-ranked" class="btn big gold" data-act="ranked">✦ Ranqueada · Arena 4v4</button>
       <div class="row">
         <input id="in-code" maxlength="5" placeholder="CÓDIGO" autocomplete="off">
         <button class="btn" data-act="join">Entrar na sala</button>
@@ -35,13 +37,15 @@
         <label class="radio"><input type="radio" name="net" value="local"> Local (abas do mesmo PC)</label>
       </div>
       <div class="row">
-        <button class="btn ghost" data-act="codex">Caçadores &amp; Universo</button>
+        <button class="btn ghost" data-act="profile">Perfil</button>
+        <button class="btn ghost" data-act="codex">Caçadores</button>
         <button class="btn ghost" data-act="howto">Como jogar</button>
+        <button class="btn ghost" data-act="settings">⚙</button>
       </div>
       <p id="menu-msg" class="msg"></p>
     </div>
   </div>
-  <div class="ver">v0.1 · Modo Arena 4v4 · Arena de Vésper</div>
+  <div class="ver">v0.2 · Arena 4v4 · Arena de Vésper</div>
 </section>
 
 <!-- ============ LOBBY ============ -->
@@ -64,6 +68,7 @@
       <div class="vs">VS</div>
       <div class="team-col t1"><h3>Crepúsculo</h3><div id="slots1" class="slots"></div></div>
     </div>
+    <div id="lob-ranked" class="lob-ranked"></div>
     <div class="picker-title">Seu caçador <span class="hint">(não pode repetir no mesmo time · vagas vazias viram bots)</span></div>
     <div id="picker" class="picker"></div>
     <p id="lob-msg" class="msg"></p>
@@ -95,7 +100,8 @@
         <div><kbd>Tab</kbd> Placar · <kbd>Esc</kbd> Menu · <kbd>M</kbd> Som</div>
       </div>
       <ul>
-        <li><b>Arena 4v4:</b> dois esquadrões de 4 caçadores. Vence o round o time que eliminar todos os inimigos. Quem vencer <b>3 rounds</b> leva a partida.</li>
+        <li><b>Arena 4v4:</b> dois esquadrões de 4 caçadores. Vence o round o time que eliminar todos os inimigos. Quem chegar a <b>7 rounds</b> leva a partida. Na partida padrão, 6×6 vira um <b>round decisivo</b>; na Ranqueada, 6×6 vai pra <b>prorrogação</b> e vence quem abrir 2 rounds de vantagem (8×6, 9×7...).</li>
+        <li><b>Ranqueada:</b> libera no <b>nível 15</b> de conta. São 5 partidas de colocação e depois você ganha ou perde <b>RR</b> (100 RR sobe de divisão): Bronze, Silver, Gold, Platinum, Diamond, Elite, Master, GrandMaster (I–III) e Champion. Grupos de até 4, com no máximo um elo de diferença entre os membros.</li>
         <li><b>Visão:</b> você só vê inimigos que estão na linha de visão do seu time. Paredes, árvores e cristais bloqueiam a visão.</li>
         <li><b>Noite:</b> os rounds pares acontecem à noite. Aí a visão vira um <b>cone</b> na direção da sua mira, com um círculo pequeno em volta.</li>
         <li><b>Névoa Rubra:</b> depois de ~30s a névoa começa a fechar o mapa. Ficar fora dela causa dano.</li>
@@ -106,11 +112,34 @@
   </div>
 </section>
 
+<!-- ============ PERFIL ============ -->
+<section id="scr-profile" class="screen">
+  <div class="codex">
+    <header><h2>Perfil</h2><button class="btn ghost" data-act="back">Voltar</button></header>
+    <div id="profile-body"></div>
+  </div>
+</section>
+
+<!-- ============ CONFIGURAÇÕES ============ -->
+<section id="scr-settings" class="screen">
+  <div class="codex narrow">
+    <header><h2>Configurações</h2><button class="btn ghost" data-act="back">Voltar</button></header>
+    <div class="set-row"><span>Qualidade gráfica</span>
+      <div class="seg" id="set-quality">
+        <button data-q="auto">Auto</button><button data-q="alta">Alta</button><button data-q="media">Média</button><button data-q="baixa">Baixa</button>
+      </div></div>
+    <p class="hint">Se o jogo estiver travando, use Média ou Baixa. No Auto, o jogo baixa a qualidade sozinho quando o PC sofre.</p>
+    <div class="set-row"><span>Mostrar FPS</span><label class="switch"><input type="checkbox" id="set-fps"><i></i></label></div>
+    <div class="set-row"><span>Som</span><label class="switch"><input type="checkbox" id="set-sound" checked><i></i></label></div>
+  </div>
+</section>
+
 <!-- ============ FIM ============ -->
 <section id="scr-end" class="screen">
   <div class="end">
     <h1 id="end-title">VITÓRIA</h1>
     <div id="end-sub" class="hint"></div>
+    <div id="end-rewards" class="rewards"></div>
     <table id="end-table"></table>
     <div class="row center">
       <button class="btn" data-act="menu">Menu</button>
@@ -144,6 +173,7 @@
       <div id="abil" class="abil"></div>
     </div>
     <canvas id="minimap" width="240" height="160"></canvas>
+    <div id="fps" class="fps"></div>
     <div id="spectate" class="spectate"></div>
   </div>
   <div id="tabboard" class="tabboard"></div>
@@ -163,6 +193,8 @@
 <script src="js/render.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/net.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/account.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

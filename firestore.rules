@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Perfis: qualquer jogador logado pode ver; só o dono pode escrever o seu.
+    match /users/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+    // Fila da Ranqueada: jogadores logados criam/atualizam entradas.
+    match /queue/{code} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

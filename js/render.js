@@ -52,10 +52,38 @@ function drawHunter(ctx, hid, x, y, aim, t, moving, o = {}) {
   ctx.scale(S, S);
   const aimUp = Math.sin(aim) < -0.25;
   const local = face === 1 ? aim : Math.PI - aim; // ângulo da arma no espaço espelhado
+  const hy = -47;
 
   ctx.save(); ctx.scale(face, 1);
-  if (o.flash) ctx.filter = 'brightness(2.2)';
+  if (aimUp) drawWeapon(ctx, hid, C, local, t);
+  if (o.fast) { const sp = bodySprite(hid, moving ? (Math.floor(t * 13 / (Math.PI * 2) * 8) % 8 + 8) % 8 : 8); ctx.drawImage(sp, -SPR_OX, -SPR_OY, SPR_W, SPR_H); }
+  else drawBody(ctx, hid, C, walk, t);
+  if (!aimUp) drawWeapon(ctx, hid, C, local, t);
+  ctx.restore();
 
+  // auréola da Lumi (fora do espelhamento)
+  if (hid === 'lumi') {
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    ctx.beginPath(); ctx.ellipse(1 * face, hy - 16 + Math.sin(t * 2) * 1.5, 9, 3, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,214,90,0.35)'; ctx.lineWidth = 5; ctx.stroke();
+    ctx.strokeStyle = '#ffe9a0'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore();
+  }
+  // orbe flutuante da Maré
+  if (hid === 'mare') {
+    const oa = t * 2.2;
+    const ox = Math.cos(oa) * 18, oy = -30 + Math.sin(oa) * 6;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const gg = ctx.createRadialGradient(ox, oy, 0, ox, oy, 9);
+    gg.addColorStop(0, 'rgba(220,255,255,0.95)'); gg.addColorStop(0.5, 'rgba(60,220,240,0.6)'); gg.addColorStop(1, 'rgba(20,120,180,0)');
+    ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(ox, oy, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// corpo do caçador (sem a arma), no espaço já espelhado
+function drawBody(ctx, hid, C, walk, t) {
   // --- costas / capa ---
   if (hid === 'corvo') {
     ctx.fillStyle = C.roupa2;
@@ -79,7 +107,6 @@ function drawHunter(ctx, hid, x, y, aim, t, moving, o = {}) {
   }
 
   // arma atrás do corpo quando mira para cima
-  if (aimUp) drawWeapon(ctx, hid, C, local, t);
 
   // --- pernas ---
   ctx.fillStyle = hid === 'lumi' ? '#d9cfa8' : shade(C.roupa2, -0.2);
@@ -146,29 +173,17 @@ function drawHunter(ctx, hid, x, y, aim, t, moving, o = {}) {
     ctx.fillStyle = hid === 'mare' ? '#0b3d4a' : '#1d1520';
     ctx.fillRect(4, hy - 1, 2, 2.6); ctx.fillRect(7.5, hy - 1, 2, 2.6);
   }
-  ctx.filter = 'none';
-  // arma na frente
-  if (!aimUp) drawWeapon(ctx, hid, C, local, t);
-  ctx.restore();
+}
 
-  // auréola da Lumi (fora do espelhamento)
-  if (hid === 'lumi') {
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    ctx.strokeStyle = '#ffe9a0'; ctx.lineWidth = 2; ctx.shadowColor = '#ffd65a'; ctx.shadowBlur = 12;
-    ctx.beginPath(); ctx.ellipse(1 * face, hy - 16 + Math.sin(t * 2) * 1.5, 9, 3, 0, 0, Math.PI * 2); ctx.stroke();
-    ctx.restore();
-  }
-  // orbe flutuante da Maré
-  if (hid === 'mare') {
-    const oa = t * 2.2;
-    const ox = Math.cos(oa) * 18, oy = -30 + Math.sin(oa) * 6;
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const gg = ctx.createRadialGradient(ox, oy, 0, ox, oy, 9);
-    gg.addColorStop(0, 'rgba(220,255,255,0.95)'); gg.addColorStop(0.5, 'rgba(60,220,240,0.6)'); gg.addColorStop(1, 'rgba(20,120,180,0)');
-    ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(ox, oy, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-  }
-  ctx.restore();
+// sprites pré-renderizados do corpo (8 quadros de caminhada + 1 parado)
+const SPR_W = 90, SPR_H = 110, SPR_OX = 45, SPR_OY = 96, SPR_RES = 2.5;
+const _bodyCache = new Map();
+function bodySprite(hid, f) {
+  const k = hid + f; let c = _bodyCache.get(k); if (c) return c;
+  c = document.createElement('canvas'); c.width = SPR_W * SPR_RES; c.height = SPR_H * SPR_RES;
+  const g = c.getContext('2d'); g.scale(SPR_RES, SPR_RES); g.translate(SPR_OX, SPR_OY);
+  drawBody(g, hid, HUNTERS[hid].cores, f === 8 ? 0 : Math.sin(f / 8 * Math.PI * 2), f * 0.37);
+  _bodyCache.set(k, c); return c;
 }
 
 function drawWeapon(ctx, hid, C, a, t) {
@@ -181,7 +196,7 @@ function drawWeapon(ctx, hid, C, a, t) {
   if (hid === 'brasa') {
     for (const off of [0, -5]) {
       ctx.fillStyle = C.arma; ctx.fillRect(9, -3 + off, 15, 5); ctx.fillRect(9, -1 + off, 4, 8);
-      ctx.fillStyle = '#ff9a2e'; ctx.shadowColor = '#ff7a1a'; ctx.shadowBlur = 8; ctx.fillRect(21, -2.5 + off, 4, 4); ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255,122,26,0.4)'; ctx.fillRect(19, -4.5 + off, 8, 8); ctx.fillStyle = '#ff9a2e'; ctx.fillRect(21, -2.5 + off, 4, 4);
     }
   } else if (hid === 'corvo') {
     ctx.fillStyle = '#3a2352'; ctx.fillRect(9, -2, 5, 4);
@@ -193,8 +208,9 @@ function drawWeapon(ctx, hid, C, a, t) {
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(15, 0, 8, 0, Math.PI * 2); ctx.fill();
   } else if (hid === 'lumi') {
     ctx.strokeStyle = '#b99a4a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(4, 6); ctx.lineTo(30, -2); ctx.stroke();
-    ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = '#fff3b0'; ctx.shadowColor = '#ffd65a'; ctx.shadowBlur = 14;
-    ctx.beginPath(); ctx.moveTo(30, -9); ctx.lineTo(35, -2); ctx.lineTo(30, 4); ctx.lineTo(25, -2); ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(255,214,90,0.35)'; ctx.beginPath(); ctx.arc(30, -2, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.moveTo(30, -9); ctx.lineTo(35, -2); ctx.lineTo(30, 4); ctx.lineTo(25, -2); ctx.closePath(); ctx.fill();
   } else if (hid === 'rocha') {
     ctx.strokeStyle = '#5a3e2b'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(32, 0); ctx.stroke();
     const g = ctx.createLinearGradient(28, -12, 42, 12); g.addColorStop(0, '#a5adb9'); g.addColorStop(1, '#4b525d');
@@ -242,6 +258,22 @@ function seesTarget(players, solids, night, team, t) {
   return false;
 }
 
+// sprites de brilho (substituem gradientes e sombras desenhados a cada quadro)
+const _glow = new Map();
+function glowSprite(color) {
+  let c = _glow.get(color); if (c) return c;
+  c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.18, color); gr.addColorStop(0.5, color + '66'); gr.addColorStop(1, color + '00');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  _glow.set(color, c); return c;
+}
+const QUALITY = {
+  alta:  { dpr: 1.5, fog: 0.5, parts: 1, sky: true, xray: true, name: 'Alta' },
+  media: { dpr: 1, fog: 0.4, parts: 0.6, sky: true, xray: true, name: 'Média' },
+  baixa: { dpr: 0.7, fog: 0.3, parts: 0.3, sky: false, xray: false, name: 'Baixa' },
+};
+
 // ------------------------------------------------------------------
 class Renderer {
   constructor(canvas) {
@@ -251,6 +283,7 @@ class Renderer {
     this.parts = [];
     this.anim = new Map();
     this.time = 0;
+    this.Q = QUALITY.alta;
     this.fog = document.createElement('canvas');
     this.fctx = this.fog.getContext('2d');
     this.buildGround();
@@ -478,11 +511,29 @@ class Renderer {
     const R = mulberry(99); this.stars = [];
     for (let i = 0; i < 220; i++) this.stars.push({ x: R() * 4000 - 800, y: R() * 3000 - 700, s: R() * 1.8 + 0.3, p: R() * 0.5 + 0.15, tw: R() * 6 });
     this.clouds = [];
-    for (let i = 0; i < 14; i++) this.clouds.push({ x: R() * 4000 - 800, y: R() * 3000 - 700, r: 160 + R() * 280, p: 0.3 + R() * 0.3, v: 6 + R() * 12 });
+    for (let i = 0; i < 10; i++) this.clouds.push({ x: R() * 4000 - 800, y: R() * 3000 - 700, r: 160 + R() * 280, p: 0.3 + R() * 0.3, v: 6 + R() * 12 });
+    const mk = (col) => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return c; };
+    this.cloudDay = mk('rgba(255,150,170,0.16)'); this.cloudNight = mk('rgba(60,30,80,0.22)');
+    // textura da névoa rubra
+    const m = document.createElement('canvas'); m.width = m.height = 256; const g = m.getContext('2d');
+    g.fillStyle = 'rgba(140,15,55,0.38)'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 60; i++) {
+      const x = R() * 256, y = R() * 256, r = 20 + R() * 60;
+      for (const [dx, dy] of [[0, 0], [256, 0], [-256, 0], [0, 256], [0, -256]]) {
+        const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+        gr.addColorStop(0, `rgba(255,${60 + R() * 60 | 0},${100 + R() * 50 | 0},0.12)`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = gr; g.fillRect(x + dx - r, y + dy - r, r * 2, r * 2);
+      }
+    }
+    this.mistTex = m; this.mistPat = null;
+    // brilho dos cristais
+    const cg = document.createElement('canvas'); cg.width = cg.height = 256; const c2 = cg.getContext('2d');
+    const gr2 = c2.createRadialGradient(128, 128, 0, 128, 128, 128); gr2.addColorStop(0, 'rgba(120,240,255,0.45)'); gr2.addColorStop(1, 'rgba(0,80,120,0)');
+    c2.fillStyle = gr2; c2.fillRect(0, 0, 256, 256); this.crystalGlow = cg;
   }
 
   // ---------- partículas ----------
-  emit(p) { if (this.parts.length < 1800) this.parts.push(p); }
+  emit(p) { if (this.parts.length < 900 * this.Q.parts && (this.Q.parts >= 1 || p.type === 'text' || p.type === 'ring' || Math.random() < this.Q.parts + 0.15)) this.parts.push(p); }
   burst(x, y, n, color, o = {}) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2, s = (o.speed || 160) * (0.3 + Math.random() * 0.7);
@@ -581,30 +632,35 @@ class Renderer {
     if (S.night) { bg.addColorStop(0, '#05060f'); bg.addColorStop(1, '#120a1c'); }
     else { bg.addColorStop(0, '#1b2350'); bg.addColorStop(0.6, '#3a2554'); bg.addColorStop(1, '#5a2638'); }
     ctx.fillStyle = bg; ctx.fillRect(0, 0, W, Hh);
-    for (const s of this.stars) {
-      const x = (s.x - this.cam.x * s.p) * z * 0.6 + W / 2, y = (s.y - this.cam.y * s.p) * z * 0.6 + Hh / 2;
-      if (x < -5 || y < -5 || x > W + 5 || y > Hh + 5) continue;
-      ctx.globalAlpha = 0.4 + 0.5 * Math.abs(Math.sin(T * 0.8 + s.tw)); ctx.fillStyle = '#fff';
-      ctx.fillRect(x, y, s.s, s.s);
-    }
-    ctx.globalAlpha = 1;
-    for (const cl of this.clouds) {
-      const x = ((cl.x + T * cl.v) % 4000 - 800 - this.cam.x * cl.p) * z * 0.7 + W / 2, y = (cl.y - this.cam.y * cl.p) * z * 0.7 + Hh / 2;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, cl.r * z);
-      g.addColorStop(0, S.night ? 'rgba(60,30,80,0.18)' : 'rgba(255,150,170,0.13)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g; ctx.fillRect(x - cl.r * z, y - cl.r * z, cl.r * 2 * z, cl.r * 2 * z);
+    if (this.Q.sky) {
+      ctx.fillStyle = '#fff';
+      for (const s of this.stars) {
+        const x = (s.x - this.cam.x * s.p) * z * 0.6 + W / 2, y = (s.y - this.cam.y * s.p) * z * 0.6 + Hh / 2;
+        if (x < -5 || y < -5 || x > W + 5 || y > Hh + 5) continue;
+        ctx.globalAlpha = 0.4 + 0.5 * Math.abs(Math.sin(T * 0.8 + s.tw));
+        ctx.fillRect(x, y, s.s * dp, s.s * dp);
+      }
+      ctx.globalAlpha = 1;
+      const cs = S.night ? this.cloudNight : this.cloudDay;
+      for (const cl of this.clouds) {
+        const x = ((cl.x + T * cl.v) % 4000 - 800 - this.cam.x * cl.p) * z * 0.7 + W / 2, y = (cl.y - this.cam.y * cl.p) * z * 0.7 + Hh / 2, r = cl.r * z;
+        if (x + r < 0 || y + r < 0 || x - r > W || y - r > Hh) continue;
+        ctx.drawImage(cs, x - r, y - r, r * 2, r * 2);
+      }
     }
 
     // mundo
     const ox = W / 2 - this.cam.x * z + sx, oy = Hh / 2 - this.cam.y * z + sy;
     ctx.setTransform(z, 0, 0, z, ox, oy);
     this.view = { x0: this.cam.x - W / 2 / z - 200, y0: this.cam.y - Hh / 2 / z - 250, x1: this.cam.x + W / 2 / z + 200, y1: this.cam.y + Hh / 2 / z + 250 };
-    ctx.drawImage(this.ground, 0, 0);
+    {
+      const gx0 = Math.max(0, Math.floor(this.cam.x - W / 2 / z - 20)), gy0 = Math.max(0, Math.floor(this.cam.y - Hh / 2 / z - 20));
+      const gx1 = Math.min(this.ground.width, Math.ceil(this.cam.x + W / 2 / z + 20)), gy1 = Math.min(this.ground.height, Math.ceil(this.cam.y + Hh / 2 / z + 20));
+      if (gx1 > gx0 && gy1 > gy0) ctx.drawImage(this.ground, gx0, gy0, gx1 - gx0, gy1 - gy0, gx0, gy0, gx1 - gx0, gy1 - gy0);
+    }
     // brilho pulsante da praça
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
-    const pg = ctx.createRadialGradient(WORLD_W / 2, WORLD_H / 2, 60, WORLD_W / 2, WORLD_H / 2, 360);
-    pg.addColorStop(0, `rgba(80,220,255,${0.12 + Math.sin(T * 1.5) * 0.05})`); pg.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(WORLD_W / 2, WORLD_H / 2, 360, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.6 + Math.sin(T * 1.5) * 0.25;
+    ctx.drawImage(this.crystalGlow, WORLD_W / 2 - 360, WORLD_H / 2 - 360, 720, 720);
     ctx.restore();
 
     // almas de aliados caídos
@@ -656,11 +712,13 @@ class Renderer {
     this.drawParts(ctx);
 
     // aliados atrás de paredes (raio-x)
-    ctx.save(); ctx.globalAlpha = 0.28;
-    for (const p of S.players) if (p.alive && p.team === me.team) {
-      const a = this.anim.get(p.id); drawHunter(ctx, p.hunter, p.x, p.y, p.aim, a.t, a.moving, { z: p.z, noShadow: true });
+    if (this.Q.xray) {
+      ctx.save(); ctx.globalAlpha = 0.25;
+      for (const p of S.players) if (p.alive && p.team === me.team) {
+        const a = this.anim.get(p.id); drawHunter(ctx, p.hunter, p.x, p.y, p.aim, a.t, a.moving, { z: p.z, noShadow: true, fast: true });
+      }
+      ctx.restore();
     }
-    ctx.restore();
 
     // tempestade
     this.drawStorm(ctx, S, T);
@@ -688,11 +746,9 @@ class Renderer {
     const sp = this.obsSprites.get(o.id);
     ctx.drawImage(sp.cv, sp.ox, sp.oy);
     if (o.k === 'crystal') {
-      ctx.save(); ctx.globalCompositeOperation = 'lighter';
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.75 + Math.sin(T * 2 + o.id) * 0.2;
       const cy = o.y - o.hh * 0.45, R = o.r * 2.4;
-      const g = ctx.createRadialGradient(o.x, cy, 0, o.x, cy, R);
-      g.addColorStop(0, `rgba(120,240,255,${0.28 + Math.sin(T * 2 + o.id) * 0.1})`); g.addColorStop(1, 'rgba(0,80,120,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(o.x, cy, R, 0, Math.PI * 2); ctx.fill();
+      ctx.drawImage(this.crystalGlow, o.x - R, cy - R, R * 2, R * 2);
       ctx.restore();
       if (Math.random() < 0.2) this.emit({ x: o.x + rnd(-o.r, o.r), y: o.y, z: rnd(20, o.hh), vx: 0, vy: 0, vz: 30, life: 0, max: 1.4, size: 2.2, color: '#9ff6ff', add: true, grav: -10, type: 'glow' });
     }
@@ -752,7 +808,8 @@ class Renderer {
   drawPlayer(ctx, p, a, me, T) {
     const rel = p.id === me.id ? '#5dff7a' : p.team === me.team ? '#4fb3ff' : '#ff4848';
     if (p.leap) ctx.globalAlpha = 1;
-    drawHunter(ctx, p.hunter, p.x, p.y, p.aim, a.t, a.moving, { ring: rel, arrow: p.id === me.id, z: p.z, flash: a.flash > 0 });
+    drawHunter(ctx, p.hunter, p.x, p.y, p.aim, a.t, a.moving, { ring: rel, arrow: p.id === me.id, z: p.z, fast: true });
+    if (a.flash > 0) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.7; const S0 = p.hunter === 'rocha' ? 70 : 56; ctx.drawImage(glowSprite('#ffffff'), p.x - S0 / 2, p.y - 30 - p.z - S0 / 2, S0, S0); ctx.restore(); }
     const S = p.hunter === 'rocha' ? 1.18 : 1;
     // efeitos de status
     if (p.shield > 0) {
@@ -785,8 +842,8 @@ class Renderer {
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     for (let i = 100; i < p.maxHp; i += 100) ctx.fillRect(x + w * i / tot, y, 1, 7);
     ctx.font = '600 11px Rajdhani, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
-    ctx.shadowColor = '#000'; ctx.shadowBlur = 3;
-    ctx.fillText(p.name, p.x, y - 5); ctx.shadowBlur = 0;
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.strokeText(p.name, p.x, y - 5);
+    ctx.fillText(p.name, p.x, y - 5);
   }
   drawReviveBar(ctx, p) {
     const f = Math.min(1, p.revive / 3.5);
@@ -794,15 +851,14 @@ class Renderer {
     ctx.beginPath(); ctx.arc(p.soulX, p.soulY - 30, 22, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2); ctx.stroke();
   }
   drawProj(ctx, pr, S, T) {
-    const a = Math.atan2(pr.vy, pr.vx), sp = Math.hypot(pr.vx, pr.vy);
+    const a = Math.atan2(pr.vy, pr.vx);
     const x = pr.x, y = pr.y - 26;
+    const glow = (col, r, al = 1) => { ctx.globalAlpha = al; ctx.drawImage(glowSprite(col), x - r, y - r, r * 2, r * 2); ctx.globalAlpha = 1; };
     switch (pr.kind) {
       case 'ember': {
-        const g = ctx.createLinearGradient(x - pr.vx * 0.05, y - pr.vy * 0.05, x, y);
-        g.addColorStop(0, 'rgba(255,80,20,0)'); g.addColorStop(1, 'rgba(255,200,90,1)');
-        ctx.strokeStyle = g; ctx.lineWidth = 6; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(x - pr.vx * 0.05, y - pr.vy * 0.05); ctx.lineTo(x, y); ctx.stroke();
-        ctx.fillStyle = '#fff2c0'; ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,110,30,0.55)'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(x - pr.vx * 0.045, y - pr.vy * 0.045); ctx.lineTo(x, y); ctx.stroke();
+        glow('#ff8a2a', 12);
         break;
       }
       case 'dagger': {
@@ -812,25 +868,21 @@ class Renderer {
         ctx.restore(); break;
       }
       case 'orb': {
-        const g = ctx.createRadialGradient(x - 2, y - 3, 1, x, y, 14);
-        g.addColorStop(0, 'rgba(240,255,255,1)'); g.addColorStop(0.45, 'rgba(70,210,240,0.8)'); g.addColorStop(1, 'rgba(20,80,160,0)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 14, 0, Math.PI * 2); ctx.fill();
-        if (Math.random() < 0.5) this.emit({ x: pr.x, y: pr.y, z: 26, vx: rnd(-30, 30), vy: rnd(-30, 30), vz: 0, life: 0, max: 0.35, size: 2.5, color: '#7ff5ff', add: true, grav: 100, type: 'glow' });
+        glow('#3fd4f0', 18);
+        if (Math.random() < 0.4) this.emit({ x: pr.x, y: pr.y, z: 26, vx: rnd(-30, 30), vy: rnd(-30, 30), vz: 0, life: 0, max: 0.35, size: 2.5, color: '#7ff5ff', add: true, grav: 100, type: 'glow' });
         break;
       }
       case 'light': {
         ctx.save(); ctx.translate(x, y); ctx.rotate(a);
-        const g = ctx.createLinearGradient(-50, 0, 8, 0); g.addColorStop(0, 'rgba(255,230,120,0)'); g.addColorStop(1, 'rgba(255,250,220,1)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(-20, 0, 30, 4.5, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(6, 0, 4, 0, Math.PI * 2); ctx.fill();
-        ctx.restore(); break;
+        ctx.fillStyle = 'rgba(255,230,140,0.45)'; ctx.beginPath(); ctx.ellipse(-22, 0, 30, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        glow('#ffe27a', 12);
+        break;
       }
       case 'fireball': {
-        const r = 26 + Math.sin(T * 30) * 2;
-        const g = ctx.createRadialGradient(x, y, 2, x, y, r * 1.6);
-        g.addColorStop(0, 'rgba(255,255,220,1)'); g.addColorStop(0.3, 'rgba(255,170,40,0.95)'); g.addColorStop(0.7, 'rgba(220,50,10,0.6)'); g.addColorStop(1, 'rgba(120,20,0,0)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r * 1.6, 0, Math.PI * 2); ctx.fill();
-        for (let i = 0; i < 3; i++) this.emit({ x: pr.x + rnd(-10, 10), y: pr.y + rnd(-10, 10), z: 26, vx: -pr.vx * 0.15 + rnd(-40, 40), vy: -pr.vy * 0.15 + rnd(-40, 40), vz: 30, life: 0, max: 0.5, size: 7, color: '#ff7a1a', add: true, grav: -30, type: 'glow' });
+        glow('#ff6a1a', 46 + Math.sin(T * 30) * 3);
+        glow('#ffd080', 22);
+        for (let i = 0; i < 2; i++) this.emit({ x: pr.x + rnd(-10, 10), y: pr.y + rnd(-10, 10), z: 26, vx: -pr.vx * 0.15 + rnd(-40, 40), vy: -pr.vy * 0.15 + rnd(-40, 40), vz: 30, life: 0, max: 0.5, size: 7, color: '#ff7a1a', add: true, grav: -30, type: 'glow' });
         break;
       }
       case 'hook': {
@@ -854,31 +906,41 @@ class Renderer {
         ctx.lineTo(pr.x, pr.y); ctx.stroke();
         ctx.strokeStyle = 'rgba(242,163,58,0.85)'; ctx.lineWidth = 3; ctx.stroke();
         ctx.globalCompositeOperation = 'lighter';
-        if (Math.random() < 0.8) this.emit({ x: pr.x + rnd(-15, 15), y: pr.y + rnd(-15, 15), z: 0, vx: rnd(-50, 50), vy: rnd(-50, 50), vz: rnd(150, 300), life: 0, max: 0.6, size: 4, color: '#8a7a66', add: false, grav: 900, type: 'debris' });
+        if (Math.random() < 0.6) this.emit({ x: pr.x + rnd(-15, 15), y: pr.y + rnd(-15, 15), z: 0, vx: rnd(-50, 50), vy: rnd(-50, 50), vz: rnd(150, 300), life: 0, max: 0.6, size: 4, color: '#8a7a66', add: false, grav: 900, type: 'debris' });
         break;
       }
       case 'wave': {
         ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(a);
         ctx.globalCompositeOperation = 'source-over';
-        const g = ctx.createLinearGradient(-70, 0, 30, 0); g.addColorStop(0, 'rgba(10,80,140,0)'); g.addColorStop(0.6, 'rgba(30,170,220,0.75)'); g.addColorStop(1, 'rgba(230,255,255,0.95)');
-        ctx.fillStyle = g; ctx.beginPath();
+        ctx.fillStyle = 'rgba(30,170,220,0.6)'; ctx.beginPath();
         ctx.moveTo(-70, -160); ctx.quadraticCurveTo(50, 0, -70, 160); ctx.lineTo(-20, 160); ctx.quadraticCurveTo(40, 0, -20, -160); ctx.closePath(); ctx.fill();
         ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-20, -160); ctx.quadraticCurveTo(40, 0, -20, 160); ctx.stroke();
         ctx.restore(); ctx.globalCompositeOperation = 'lighter';
-        for (let i = 0; i < 3; i++) { const l = rnd(-150, 150); this.emit({ x: pr.x - Math.sin(a) * l, y: pr.y + Math.cos(a) * l, z: rnd(10, 40), vx: pr.vx * 0.3, vy: pr.vy * 0.3, vz: 80, life: 0, max: 0.5, size: 3, color: '#bff9ff', add: true, grav: 300, type: 'glow' }); }
+        for (let i = 0; i < 2; i++) { const l = rnd(-150, 150); this.emit({ x: pr.x - Math.sin(a) * l, y: pr.y + Math.cos(a) * l, z: rnd(10, 40), vx: pr.vx * 0.3, vy: pr.vy * 0.3, vz: 80, life: 0, max: 0.5, size: 3, color: '#bff9ff', add: true, grav: 300, type: 'glow' }); }
         break;
       }
     }
   }
   drawParts(ctx) {
+    // 1ª passada: partículas normais; 2ª: aditivas (brilho), sem trocar o modo a cada partícula
+    ctx.globalCompositeOperation = 'source-over';
     for (const p of this.parts) {
+      if (p.add) continue;
       const f = p.life / p.max, y = p.y - p.z;
       if (p.type === 'text') {
         ctx.globalAlpha = 1 - f * f; ctx.font = `800 ${p.size}px Rajdhani, sans-serif`; ctx.textAlign = 'center';
         ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.strokeText(p.str, p.x, y); ctx.fillStyle = p.color; ctx.fillText(p.str, p.x, y);
-        continue;
+      } else if (p.type === 'smoke') {
+        ctx.globalAlpha = (1 - f) * 0.45; ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, y, p.size * (0.6 + f), 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.globalAlpha = 1 - f; ctx.fillStyle = p.color; ctx.fillRect(p.x - p.size / 2, y - p.size / 2, p.size, p.size);
       }
-      ctx.globalCompositeOperation = p.add ? 'lighter' : 'source-over';
+    }
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of this.parts) {
+      if (!p.add) continue;
+      const f = p.life / p.max, y = p.y - p.z;
       if (p.type === 'ring') {
         ctx.globalAlpha = 1 - f; ctx.strokeStyle = p.color; ctx.lineWidth = p.w * (1 - f);
         ctx.beginPath(); ctx.ellipse(p.x, p.y, p.size * (0.3 + 0.7 * f), p.size * (0.3 + 0.7 * f) * 0.8, 0, 0, Math.PI * 2); ctx.stroke();
@@ -886,46 +948,33 @@ class Renderer {
         ctx.globalAlpha = 1 - f; ctx.strokeStyle = p.color; ctx.lineWidth = 16 * (1 - f);
         ctx.save(); ctx.translate(p.x, p.y - 20); ctx.scale(1, 0.7);
         ctx.beginPath(); ctx.arc(0, 0, p.size * (0.6 + f * 0.4), p.a - 1.05 + f * 0.5, p.a + 1.05); ctx.stroke(); ctx.restore();
-      } else if (p.type === 'smoke') {
-        ctx.globalAlpha = (1 - f) * 0.45; ctx.fillStyle = p.color;
-        ctx.beginPath(); ctx.arc(p.x, y, p.size * (0.6 + f), 0, Math.PI * 2); ctx.fill();
-      } else if (p.type === 'debris') {
-        ctx.globalAlpha = 1 - f; ctx.fillStyle = p.color; ctx.fillRect(p.x - p.size / 2, y - p.size / 2, p.size, p.size);
       } else {
-        ctx.globalAlpha = 1 - f; ctx.fillStyle = p.color;
-        ctx.beginPath(); ctx.arc(p.x, y, p.size * (1 - f * 0.5), 0, Math.PI * 2); ctx.fill();
+        const r = p.size * (1 - f * 0.5) * 2.4;
+        ctx.globalAlpha = 1 - f; ctx.drawImage(glowSprite(p.color), p.x - r, y - r, r * 2, r * 2);
       }
     }
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
   drawStorm(ctx, S, T) {
     const st = S.storm; if (st.r >= 1490) return;
+    if (!this.mistPat) this.mistPat = ctx.createPattern(this.mistTex, 'repeat');
     ctx.save();
     ctx.beginPath(); ctx.rect(-1000, -1000, WORLD_W + 2000, WORLD_H + 2000); ctx.arc(st.x, st.y, st.r, 0, Math.PI * 2, true);
-    ctx.fillStyle = 'rgba(150,20,60,0.32)'; ctx.fill();
-    ctx.clip();
-    ctx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 26; i++) {
-      const a = i / 26 * Math.PI * 2 + T * 0.08 * (i % 2 ? 1 : -1), r = st.r + 80 + (i % 5) * 70;
-      const x = st.x + Math.cos(a) * r, y = st.y + Math.sin(a) * r;
-      const g = ctx.createRadialGradient(x, y, 0, x, y, 220);
-      g.addColorStop(0, 'rgba(255,60,90,0.12)'); g.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = g; ctx.fillRect(x - 220, y - 220, 440, 440);
-    }
+    ctx.translate(T * 14, T * 6);
+    ctx.fillStyle = this.mistPat; ctx.fill();
     ctx.restore();
-    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    ctx.save();
     ctx.beginPath(); ctx.arc(st.x, st.y, st.r, 0, Math.PI * 2);
     ctx.strokeStyle = 'rgba(255,50,100,0.25)'; ctx.lineWidth = 26; ctx.stroke();
     ctx.strokeStyle = 'rgba(255,110,150,0.95)'; ctx.lineWidth = 5; ctx.stroke();
     ctx.restore();
   }
   drawFog(S, me, z, ox, oy) {
-    const W = this.c.width, Hh = this.c.height, q = 0.5;
+    const W = this.c.width, Hh = this.c.height, q = this.Q.fog;
     const fw = Math.ceil(W * q), fh = Math.ceil(Hh * q);
     if (this.fog.width !== fw || this.fog.height !== fh) { this.fog.width = fw; this.fog.height = fh; }
     const f = this.fctx;
-    f.setTransform(1, 0, 0, 1, 0, 0); f.globalCompositeOperation = 'source-over';
-    f.clearRect(0, 0, fw, fh);
+    f.setTransform(1, 0, 0, 1, 0, 0); f.globalCompositeOperation = 'copy';
     f.fillStyle = S.night ? 'rgba(3,5,18,0.88)' : 'rgba(6,10,28,0.55)'; f.fillRect(0, 0, fw, fh);
     f.setTransform(z * q, 0, 0, z * q, ox * q, oy * q);
     f.globalCompositeOperation = 'destination-out'; f.fillStyle = '#fff';
@@ -944,8 +993,6 @@ class Renderer {
     this.ctx.imageSmoothingEnabled = true;
     this.ctx.drawImage(this.fog, 0, 0, W, Hh);
   }
-
-  // ---------- minimapa ----------
   minimap(mc, S, me) {
     const c = mc.getContext('2d'), w = mc.width, h = mc.height, k = w / WORLD_W;
     c.clearRect(0, 0, w, h);

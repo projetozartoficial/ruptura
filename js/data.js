@@ -5,7 +5,7 @@
 
 const WORLD_W = 2400, WORLD_H = 1600;
 const TICK = 1 / 60;
-const WIN_ROUNDS = 3;
+const WIN_ROUNDS = 7;
 
 const TEAMS = [
   { name: 'Alvorada', main: '#3fa9ff', light: '#a8dcff', dark: '#174a86', glow: 'rgba(63,169,255,' },

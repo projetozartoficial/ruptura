@@ -59,7 +59,8 @@ function emptyInput() { return { mx: 0, my: 0, ax: 0, ay: 0, fire: false, q: fal
 
 // ------------------------------------------------------------------
 class Sim {
-  constructor(slots) {
+  constructor(slots, opts = {}) {
+    this.mode = opts.mode || 'standard'; // 'standard' | 'ranked' | 'training'
     this.players = [];
     slots.forEach((s, i) => {
       if (!s || s.kind === 'empty') return;
@@ -95,6 +96,13 @@ class Sim {
   }
 
   ev(e) { this.events.push(e); }
+  // Padrão: primeiro a 7 (6x6 vira round decisivo). Ranqueada: 6x6 vai pra prorrogação, vence quem abrir 2.
+  matchDecided() {
+    const [a, b] = this.score, top = Math.max(a, b);
+    if (top < WIN_ROUNDS) return false;
+    if (this.mode === 'ranked') return Math.abs(a - b) >= 2;
+    return true;
+  }
   byId(id) { return this.players.find(p => p.id === id); }
 
   startRound() {
@@ -113,7 +121,8 @@ class Sim {
     }
     this.storm.r = 1500;
     this.phase = 'countdown'; this.phaseT = 3; this.fightT = 0;
-    this.ev({ k: 'round', n: this.round, night: this.night });
+    const [a, b] = this.score;
+    this.ev({ k: 'round', n: this.round, night: this.night, ot: this.mode === 'ranked' && a >= WIN_ROUNDS - 1 && b >= WIN_ROUNDS - 1, dec: this.mode !== 'ranked' && a === WIN_ROUNDS - 1 && b === WIN_ROUNDS - 1 });
   }
 
   // ---------- visão (usada pelos bots) ----------
@@ -157,7 +166,7 @@ class Sim {
       this.phaseT -= dt;
       this.updateEffects(dt);
       if (this.phaseT <= 0) {
-        if (this.score[0] >= WIN_ROUNDS || this.score[1] >= WIN_ROUNDS) {
+        if (this.matchDecided()) {
           this.phase = 'matchEnd'; this.winner = this.score[0] > this.score[1] ? 0 : 1;
           this.ev({ k: 'match', w: this.winner });
         } else this.startRound();
