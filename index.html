@@ -1,234 +1,90 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>RUPTURA — Caçadores do Abismo</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ruptura · Caçadores do Abismo</title>
+<meta name="description" content="Ruptura: FPS tático 5v5 no navegador. 20 caçadores, 7 mapas, Núcleo, economia e Ranqueada.">
+<link rel="icon" href="logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="icon" type="image/svg+xml" href="logo.svg?v=18">
-<link rel="stylesheet" href="style.css?v=18">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="fps/fps.css?v=4">
 </head>
 <body>
-<canvas id="bg"></canvas>
+<canvas id="cv"></canvas>
+<div class="vig"></div>
+<canvas id="hud2d"></canvas>
 
-<!-- ============ MENU ============ -->
-<section id="scr-menu" class="screen active">
-  <div class="menu-wrap">
-    <div class="logo">
-      <img class="logo-emblem" src="logo.svg?v=18" alt="" width="110" height="110" style="width:110px;height:110px">
-      <h1>RUPTURA</h1>
-      <h2>Caçadores do Abismo</h2>
+<div id="menu" class="menu">
+  <div class="mbox">
+    <div class="mhead"><img src="logo.png" alt="" width="64" height="64"><div><h1>RUPTURA</h1><div class="sub">Caçadores do Abismo · FPS tático 5v5</div></div>
+      <div id="acct" class="acctbar"></div></div>
+    <div class="mplay">
+      <div class="online"><button class="btn rk big" id="btn-ranked">Ranqueada</button><button class="btn gold big" id="btn-play">Jogar contra bots</button><button class="btn big" id="btn-host">Criar sala</button><input id="in-code" maxlength="6" placeholder="CÓDIGO" autocomplete="off"><button class="btn big" id="btn-join">Entrar</button></div>
+      <div class="acct" id="acctmsg"></div>
     </div>
-    <div class="menu-box">
-      <div id="acct" class="acct"></div>
-      <button id="login-gate" class="btn big gbtn" data-act="login"><b style="color:#4285f4;font-size:20px">G</b> Entrar com Google para jogar</button>
-      <a class="btn big" href="fps.html" style="border-color:#7ff5ff;color:#7ff5ff;text-decoration:none"><span class="mi">◎</span> Modo Tático FPS (teste)</a>
-      <button class="btn big" data-act="solo"><span class="mi">▶</span> Treino contra bots</button>
-      <button class="btn big" data-act="host"><span class="mi">⚔</span> Partida padrão</button>
-      <button id="btn-ranked" class="btn big gold" data-act="ranked"><span class="mi">✦</span> Ranqueada</button>
-      <div class="row join">
-        <input id="in-code" maxlength="5" placeholder="CÓDIGO" autocomplete="off">
-        <button class="btn" data-act="join">Entrar na sala</button>
-      </div>
-      <div class="menu-grid">
-        <button class="btn ghost" data-act="friends">Amigos<span id="fr-badge" class="badge"></span></button>
-        <button class="btn ghost" data-act="profile">Perfil</button>
-        <button class="btn ghost" data-act="codex">Caçadores</button>
-        <button class="btn ghost" data-act="howto">Ajuda</button>
-        <button class="btn ghost" data-act="settings" title="Configurações">⚙</button>
-      </div>
-      <p id="menu-msg" class="msg"></p>
-    </div>
-  </div>
-  <div class="ver">v0.7 · Arena 4v4 · Arena de Vésper</div>
-</section>
-
-<!-- ============ LOBBY ============ -->
-<section id="scr-lobby" class="screen">
-  <div class="lobby">
-    <header>
-      <div>
-        <div class="lbl">SALA</div>
-        <div class="row" style="gap:8px"><div id="lob-code" class="code">-----</div><button id="btn-copy" class="btn ghost" data-act="copycode" style="padding:5px 9px;font-size:12px">Copiar código</button></div>
-        <div id="lob-mode" class="hint"></div>
-      </div>
-      <div class="lob-title">Escolha seu time e seu caçador</div>
-      <div class="lob-actions">
-        <button class="btn ghost" data-act="friends">Convidar amigos</button>
-        <button class="btn ghost" data-act="leave">Sair</button>
-        <button id="btn-start" class="btn big gold" data-act="start">Começar partida</button>
-      </div>
-    </header>
-    <div class="teams">
-      <div class="team-col t0"><h3>Alvorada</h3><div id="slots0" class="slots"></div></div>
-      <div class="vs">VS</div>
-      <div class="team-col t1"><h3>Crepúsculo</h3><div id="slots1" class="slots"></div></div>
-    </div>
-    <div id="lob-ranked" class="lob-ranked"></div>
-    <div class="picker-title">Seu caçador <span class="hint">(não pode repetir no mesmo time · vagas vazias viram bots)</span></div>
-    <div id="picker" class="picker"></div>
-    <p id="lob-msg" class="msg"></p>
-  </div>
-</section>
-
-<!-- ============ CODEX ============ -->
-<section id="scr-draft" class="screen">
-  <div class="draft-wrap">
-    <h2 class="title">Veto de Mapas</h2>
-    <div id="draft-st" class="draft-st"></div>
-    <div id="draft-maps" class="draft-maps"></div>
-    <button class="btn ghost" data-act="leave">Sair</button>
-  </div>
-</section>
-<section id="scr-codex" class="screen">
-  <div class="codex">
-    <header><h2>Caçadores &amp; Universo</h2><button class="btn ghost" data-act="back">Voltar</button></header>
-    <div id="codex-lore" class="lore"></div>
-    <div id="codex-list" class="codex-list"></div>
-  </div>
-</section>
-
-<!-- ============ COMO JOGAR ============ -->
-<section id="scr-howto" class="screen">
-  <div class="codex">
-    <header><h2>Como jogar</h2><button class="btn ghost" data-act="back">Voltar</button></header>
-    <div class="howto">
-      <div class="keys">
-        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Andar</div>
-        <div><kbd>Mouse</kbd> Mirar (todo ataque é mira manual)</div>
-        <div><kbd>Botão esq.</kbd> Ataque básico (segure)</div>
-        <div><kbd>Q</kbd> ou <kbd>Botão dir.</kbd> Habilidade 1</div>
-        <div><kbd>E</kbd> Habilidade 2</div>
-        <div><kbd>R</kbd> Habilidade suprema</div>
-        <div><kbd>Espaço</kbd> / <kbd>Shift</kbd> Esquiva rápida</div>
-        <div><kbd>Tab</kbd> Placar · <kbd>Esc</kbd> Menu · <kbd>M</kbd> Som</div>
-      </div>
-      <ul>
-        <li><b>Arena 4v4:</b> dois esquadrões de 4 caçadores. Vence o round o time que eliminar todos os inimigos. Quem chegar a <b>5 rounds</b> leva a partida. Na partida padrão, 4×4 vira um <b>round decisivo</b>; na Ranqueada, 4×4 vai pra <b>prorrogação</b> e vence quem abrir 2 rounds de vantagem (6×4, 7×5...).</li>
-        <li><b>Ranqueada:</b> libera no <b>nível 15</b> de conta. São 5 partidas de colocação e depois você ganha ou perde <b>RR</b> (100 RR sobe de divisão): Bronze, Silver, Gold, Platinum, Diamond, Elite, Master, GrandMaster (I–III) e Champion. Grupos de até 4, com no máximo um elo de diferença entre os membros.</li>
-        <li><b>Troca de caçador:</b> entre um round e outro abre um painel e você pode trocar de caçador (sem repetir no time). Mude a tática conforme a partida!</li>
-        <li><b>Visão:</b> você só vê inimigos que estão na linha de visão do seu time. Paredes, árvores e cristais bloqueiam a visão.</li>
-        <li><b>Noite:</b> os rounds pares acontecem à noite. Aí a visão vira um <b>cone</b> na direção da sua mira, com um círculo pequeno em volta.</li>
-        <li><b>Névoa Rubra:</b> depois de ~30s a névoa começa a fechar o mapa. Ficar fora dela causa dano.</li>
-        <li><b>Reviver:</b> quem cai deixa a <b>alma</b> no chão. Fique perto dela por 3,5s para reviver o aliado com 40% de vida.</li>
-        <li><b>Classes:</b> Lutador (dano), Iniciador (abre lutas), Controlador (zonas), Protetor (cura), Vanguarda (tanque). Monte um time equilibrado!</li>
-      </ul>
-    </div>
-  </div>
-</section>
-
-<!-- ============ PERFIL ============ -->
-<section id="scr-profile" class="screen">
-  <div class="codex">
-    <header><h2>Perfil</h2><button class="btn ghost" data-act="back">Voltar</button></header>
-    <div id="profile-body"></div>
-  </div>
-</section>
-
-<!-- ============ FIM ============ -->
-<section id="scr-end" class="screen">
-  <div class="end">
-    <h1 id="end-title">VITÓRIA</h1>
-    <div id="end-sub" class="hint"></div>
-    <div id="end-rewards" class="rewards"></div>
-    <table id="end-table"></table>
-    <div class="row center">
-      <button class="btn" data-act="menu">Menu</button>
-      <button id="btn-again" class="btn gold big" data-act="again">Jogar de novo</button>
-    </div>
-  </div>
-</section>
-
-<!-- ============ JOGO ============ -->
-<section id="scr-game" class="screen">
-  <div id="hud">
-    <div class="top">
-      <div class="score">
-        <div class="sc t0"><span id="sc0">0</span><small>ALVORADA</small></div>
-        <div class="mid"><div id="hud-round">ROUND 1</div><div id="hud-timer">0:00</div></div>
-        <div class="sc t1"><small>CREPÚSCULO</small><span id="sc1">0</span></div>
-      </div>
-      <div class="roster"><div id="ros0" class="ros"></div><div id="ros1" class="ros"></div></div>
-    </div>
-    <div id="hud-code" class="hud-code"></div>
-    <div id="feed" class="feed"></div>
-    <div id="banner" class="banner"></div>
-    <div class="bottom">
-      <div class="me">
-        <canvas id="me-port" width="84" height="84"></canvas>
-        <div class="me-info">
-          <div id="me-name" class="me-name"></div>
-          <div class="hpbar"><div id="me-hp" class="hp"></div><div id="me-sh" class="sh"></div><span id="me-hptxt"></span></div>
-        </div>
-      </div>
-      <div id="abil" class="abil"></div>
-    </div>
-    <canvas id="minimap" width="240" height="160"></canvas>
-    <div id="fps" class="fps"></div>
-    <div id="swap" class="swap"><div class="swap-h"><b id="swap-h-b">Trocar de caçador</b><span id="swap-t"></span></div><div id="swap-list" class="swap-list"></div></div>
-    <div id="spectate" class="spectate"></div>
-  </div>
-  <div id="tabboard" class="tabboard"></div>
-  <div id="pause" class="pause">
-    <div class="pause-box">
-      <h2>Pausa</h2>
-      <button class="btn" data-act="resume">Continuar</button>
-      <button class="btn" data-act="settings">Configurações</button>
-      <button class="btn ghost" data-act="quit">Sair da partida</button>
-    </div>
-  </div>
-</section>
-
-<!-- ============ ID Nome#TAG ============ -->
-<div id="nick-modal" class="modal">
-  <div class="modal-box">
-    <h2>Escolha seu ID</h2>
-    <p class="hint">É assim que você vai aparecer no jogo e como seus amigos vão te adicionar.</p>
-    <div class="nick-row">
-      <input id="nk-name" maxlength="14" placeholder="Nome" autocomplete="off">
-      <span class="hash">#</span>
-      <input id="nk-tag" maxlength="5" placeholder="TAG" autocomplete="off">
-    </div>
-    <p class="hint">Nome: 3 a 14 caracteres (letras, números ou _). TAG: 3 a 5 letras ou números.</p>
-    <div id="nk-prev" class="nk-prev"></div>
-    <p id="nk-msg" class="msg"></p>
-    <div class="row center"><button id="nk-cancel" class="btn ghost" data-act="nickcancel">Cancelar</button><button class="btn gold big" data-act="nickok">Confirmar</button></div>
+    <div class="rules"><b>Como funciona:</b> 5 contra 5 (bots completam). O ataque leva o <b>Núcleo</b> até o Site A ou B e planta (segure F). A defesa impede ou desarma. Vence quem fizer <b>7 rounds</b>; troca de lado depois do round 6 (6×6 vai pra prorrogação, precisa abrir 2).
+      <br>Créditos: começo ◈800 · vitória ◈3000 · derrota ◈1900/2400/2900 · abate ◈200 · plantar ◈300 pro time.</div>
+    <h3>Mapa <small>(partidas contra bots e salas)</small></h3>
+    <div id="mpick" class="mpick"></div>
+    <h3>Escolha seu caçador</h3>
+    <div id="pick" class="pick"></div>
+    <div class="mfoot"><div class="keys">WASD andar · Shift andar devagar · Ctrl agachar · Espaço pular · Mouse mirar/atirar · Botão direito: luneta · R recarregar · 1/2/3 armas · B loja · F plantar/desarmar/pegar · C Q E X habilidades · G largar arma · Tab placar · Esc pausa</div></div>
+    <details class="setbox"><summary>Configurações</summary><div id="fpset" class="fpset"></div></details>
   </div>
 </div>
 
-<!-- ============ CONFIGURAÇÕES ============ -->
-<div id="set-modal" class="modal">
-  <div class="modal-box set-box">
-    <header class="set-head"><h2>Configurações</h2><button class="btn ghost" data-act="setclose">✕</button></header>
-    <div class="tabs" id="set-tabs">
-      <button data-tab="video">Vídeo</button><button data-tab="audio">Áudio</button><button data-tab="controls">Controles</button><button data-tab="privacy">Privacidade</button><button data-tab="game">Jogo</button>
-    </div>
-    <div id="set-body" class="set-body"></div>
+<div id="hud" class="hud" style="display:none">
+  <div class="top">
+    <div class="ros" id="ros-me"></div>
+    <div class="scb"><b id="sc-me" class="me">0</b><div><div id="timer"></div><div id="phase"></div></div><b id="sc-en" class="en">0</b></div>
+    <div class="ros" id="ros-en"></div>
   </div>
+  <div id="feed" class="feed"></div>
+  <div id="banner" class="banner"></div>
+  <div id="kb" class="kb"></div>
+  <div id="tip" class="tip"></div>
+  <div id="prog" class="prog" style="display:none"></div>
+  <div class="bl"><div class="hpbox"><span class="hpl">VIDA</span><b id="hp">100</b><i id="ar"></i></div><div id="cr" class="cr"></div></div>
+  <div id="abil" class="abil"></div>
+  <div class="br"><div id="slots" class="slots"></div><div id="wname" class="wname"></div><div id="ammo" class="ammo"></div></div>
+  <div id="buy" class="buy"></div>
+  <div id="board" class="board"></div>
 </div>
+<div id="room" class="room"><div class="rbox">
+  <div class="rhead"><div><small id="rkind">SALA PERSONALIZADA</small><b id="rcode"></b></div><button class="btn" id="btn-rcopy">Copiar</button><button class="btn ghost" id="btn-rhide" title="Esconder o código (para live)">👁</button><span class="sp"></span><button class="btn" id="btn-rleave">Sair</button></div>
+  <div class="rteams"><div class="rt" id="rt0"></div><div class="rvs">VS</div><div class="rt" id="rt1"></div></div>
+  <div id="rq" class="rq"></div>
+  <div id="rmapbox"><h4>Mapa (o dono da sala escolhe)</h4><div id="rmap" class="mpick small"></div></div>
+  <h4>Seu caçador</h4><div id="rpick" class="rpick"></div>
+  <div class="rfoot"><span id="rmsg"></span><button class="btn gold big" id="btn-rstart">Começar partida</button></div>
+</div></div>
+<div id="pause" class="pause"><div class="pbox"><h2>Pausa</h2><button class="btn gold" id="btn-resume">Continuar</button><button class="btn" id="btn-quit">Sair da partida</button><details class="setbox" open><summary>Configurações</summary><div class="fpset" id="fpset2"></div></details></div></div>
+<div id="end" class="end"></div>
+<div id="gate"></div>
+<div id="side" class="side"></div>
+<div id="invites" class="invites"></div>
+<div id="nick" class="modal"><div class="mdbox">
+  <h2>Escolha seu ID</h2>
+  <p>É assim que seus amigos vão te achar. O nome tem de 3 a 14 caracteres; a TAG, de 3 a 5 letras ou números.</p>
+  <div class="nickrow"><input id="nk-name" maxlength="14" placeholder="Nome" autocomplete="off"><span>#</span><input id="nk-tag" maxlength="5" placeholder="TAG" autocomplete="off"></div>
+  <div class="mdmsg" id="nk-msg"></div>
+  <div class="row"><button class="btn ghost" id="nk-cancel">Cancelar</button><button class="btn gold" id="nk-ok">Confirmar</button></div>
+</div></div>
 
-<!-- ============ AMIGOS ============ -->
-<aside id="friends" class="friends">
-  <header><h3>Amigos</h3><button class="btn ghost" data-act="friendsclose">✕</button></header>
-  <div id="fr-me" class="fr-me"></div>
-  <div class="row"><input id="fr-add" placeholder="Nome#TAG do amigo" autocomplete="off"><button class="btn" data-act="addfriend">Adicionar</button></div>
-  <p id="fr-msg" class="msg"></p>
-  <div id="fr-list"></div>
-</aside>
-<div id="toasts" class="toasts"></div>
-
-<script src="js/data.js?v=18"></script>
-<script src="js/maps.js?v=18"></script>
-<script src="js/sim.js?v=18"></script>
-<script src="js/ai.js?v=18"></script>
-<script src="js/render.js?v=18"></script>
-<script src="js/audio.js?v=18"></script>
-<script src="js/net.js?v=18"></script>
-<script src="js/settings.js?v=18"></script>
+<script src="js/data.js?v=19"></script>
+<script src="fps/engine.js?v=3"></script>
+<script src="fps/weapons.js?v=1"></script>
+<script src="fps/data.js?v=4"></script>
+<script src="fps/maps.js?v=3"></script>
+<script src="fps/world.js?v=4"></script>
+<script src="fps/game.js?v=5"></script>
+<script src="js/net.js?v=19"></script>
+<script src="fps/net.js?v=2"></script>
 <script src="js/firebase-config.js?v=18"></script>
-<script src="js/account.js?v=18"></script>
-<script src="js/main.js?v=18"></script>
+<script src="js/account.js?v=19"></script>
+<script src="fps/render.js?v=2"></script>
+<script src="fps/main.js?v=7"></script>
+<script src="fps/social.js?v=1"></script>
 </body>
 </html>

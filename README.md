@@ -1,12 +1,10 @@
 # RUPTURA — Caçadores do Abismo
 
-Jogo de navegador com dois modos, contas Google e partidas online com amigos (bots completam as vagas vazias).
+FPS tático 5v5 de navegador, com contas Google, amigos, Ranqueada e partidas online (bots completam as vagas vazias).
 
 **Jogar:** https://wasmorf.github.io/Ruptura/
 
-## Modos
-
-### Modo Tático (FPS) — `fps.html`
+## Como funciona
 FPS tático em primeira pessoa, 5 contra 5.
 - O ataque leva o **Núcleo** até um site e planta; a defesa impede ou desarma. Vence quem fizer **7 rounds**; troca de lado depois do round 6 (6×6 vai pra prorrogação, precisa abrir 2).
 - **Economia:** começo ◈800 · vitória ◈3000 · derrota ◈1900 / 2400 / 2900 · abate ◈200 · plantar ◈300 para o time.
@@ -27,8 +25,21 @@ FPS tático em primeira pessoa, 5 contra 5.
 - Fogo amigo: tiros não ferem aliados; habilidades ferem com metade do dano.
 - Controles: WASD · Shift andar devagar · Ctrl agachar · Espaço pular · mouse mirar/atirar · botão direito luneta · R recarregar · 1/2/3 armas · B loja · F plantar/desarmar/pegar arma/alavanca · C Q E X habilidades · G largar arma · Tab placar.
 
-### Arena 4v4 (isométrico) — `index.html`
-Hero shooter visto de cima com WASD + mira no mouse, 20 caçadores, veto de mapas, banimento de caçadores, troca de caçador entre rounds e **Ranqueada** (Bronze → Champion, libera no nível 15). Primeiro a 5 rounds.
+## Modos de jogo
+- **Contra bots** — você e 4 bots contra 5 bots, no mapa que escolher.
+- **Sala personalizada** — crie uma sala, passe o código (ou convide pela lista de amigos) e escolha o mapa. Vagas vazias viram bots.
+- **Ranqueada** — libera no **nível 15** de conta.
+  - Monte um grupo de 1 a 5 pessoas (no máximo **1 elo de diferença** entre elas) e busque partida. Dois grupos se encontram pela fila; quem faltar vira bot. Se ninguém aparecer em 1 minuto, dá pra jogar contra bots valendo metade do RR.
+  - Elos: Bronze, Silver, Gold, Platinum, Diamond, Elite, Master e GrandMaster (I, II e III) e Champion.
+  - **5 partidas de colocação** definem o primeiro elo. Depois, cada divisão tem **100 RR**.
+  - O RR depende de vitória/derrota, da diferença de rounds, do seu desempenho (pesa mais nos elos baixos) e de um MMR escondido. O mapa é sorteado.
+  - Sair no meio de uma ranqueada conta como derrota.
+
+## Conta e amigos
+- Entrar com Google é obrigatório. No primeiro login você escolhe seu ID **Nome#TAG** (TAG de 3 a 5 letras ou números, única).
+- **Perfil:** nível, XP, elo, pico, estatísticas, caçadores favoritos e últimas partidas.
+- **Amigos:** adicione pelo ID, veja quem está online/em sala/em partida, convide para sua sala ou entre na sala deles.
+- **Privacidade:** esconder os nomes dos outros jogadores e o código da sala (bom para live).
 
 ## Configurar as contas (Firebase)
 Só joga quem conectar a conta Google.
@@ -41,7 +52,9 @@ Só joga quem conectar a conta Google.
 O multiplayer é P2P (WebRTC): quem cria a sala roda a partida, e a conexão entre os jogadores é combinada pelo Firestore.
 
 ## Arquivos
-**Modo Tático (`fps/`)**
+- `index.html` — página do jogo (`fps.html` só redireciona para ela)
+
+**`fps/`**
 - `engine.js` — motor 3D próprio em WebGL2 (sombras, céu, materiais), colisão e raios
 - `weapons.js` — armas e modelos 3D
 - `data.js` — regras, economia e habilidades dos caçadores
@@ -49,7 +62,11 @@ O multiplayer é P2P (WebRTC): quem cria a sala roda a partida, e a conexão ent
 - `game.js` — partida (rounds, Núcleo, tiros, habilidades) e bots
 - `render.js` — desenho do mapa, personagens e arma em primeira pessoa
 - `net.js` — rede (previsão de movimento, interpolação, compensação de atraso)
-- `main.js` — menus, salas, loja, HUD e laço do jogo
+- `main.js` — menus, salas, fila da Ranqueada, loja, HUD e laço do jogo
+- `social.js` — login, ID, perfil, amigos, convites e privacidade
 
-**Arena 4v4 (`js/`)**
-- `data.js` caçadores · `maps.js` mapas · `sim.js` partida · `ai.js` bots · `render.js` gráficos · `net.js` rede · `account.js` contas, progressão e Ranqueada · `main.js` menus e HUD
+**`js/`**
+- `data.js` — classes e caçadores (nomes, cores e história)
+- `net.js` — transporte de rede (WebRTC combinado pelo Firestore)
+- `account.js` — contas, XP, elos/RR e fila da Ranqueada
+- `firebase-config.js` — configuração do Firebase e nível mínimo da Ranqueada

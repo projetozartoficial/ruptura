@@ -32,7 +32,7 @@ const AU = {
 
 // ---------------- início ----------------
 let gl;
-try { gl = App.gl = new GL($('#cv')); } catch (e) { $('#gate').innerHTML = `<h2>Não deu para abrir o modo FPS</h2><p>${esc(e.message)}</p><a class="btn" href="index.html">Voltar</a>`; throw e; }
+try { gl = App.gl = new GL($('#cv')); } catch (e) { $('#gate').innerHTML = `<h2>Não deu para abrir o modo FPS</h2><p>${esc(e.message)}</p><a class="btn" href="index.html">Tentar de novo</a>`; throw e; }
 App.mapSel = 'random'; try { App.mapSel = localStorage.getItem('ruptura-fps-map') || 'random'; } catch (e) { }
 loadMap(FPS_MAP_IDS.includes(App.mapSel) ? App.mapSel : 'vesper'); gl.shadows = !!FS.shadows;
 
@@ -75,16 +75,23 @@ function hunterPortraitFPS(h) {
 }
 try { App.hunter = localStorage.getItem('ruptura-fps-h') || 'brasa'; if (!FPS_HUNTERS[App.hunter]) App.hunter = 'brasa'; } catch (e) { }
 
-const myName = () => (window.Account && Account.profile && Account.profile.name) || 'Você';
+const myName = () => (Account.profile && Account.profile.name) || 'Você';
+// dados da conta que vão junto com o jogador para a sala (nível e ranque para a Ranqueada)
+function myInfo() {
+  const P = Account.profile, u = Account.user;
+  return P ? { uid: u ? u.uid : null, tag: P.tag || '', lvl: P.level, rank: P.rank, mmr: P.mmr, pl: P.placements } : { lvl: 1, rank: -1, mmr: 1000, pl: 0 };
+}
+const KIND_NAME = { solo: 'Contra bots', custom: 'Sala personalizada', ranked: 'Ranqueada' };
+App.kind = 'solo';
 App.role = 'solo'; App.net = new URLSearchParams(location.search).get('net') === 'local' ? 'local' : 'online';
 function botSlots(slots) {
   const names = BOT_NAMES_F.slice().sort(() => Math.random() - 0.5);
+  const used = [0, 1].map(t => slots.filter((x, j) => x.kind !== 'empty' && (j < RULES.teamSize ? 0 : 1) === t).map(x => x.hunter));
   return slots.map((s, i) => {
     if (s.kind !== 'empty') return s;
-    const team = i < RULES.teamSize ? 0 : 1, used = slots.filter((x, j) => x.kind !== 'empty' && (j < RULES.teamSize ? 0 : 1) === team).map(x => x.hunter);
-    const free = FPS_HUNTER_IDS.filter(h => !used.includes(h));
+    const U = used[i < RULES.teamSize ? 0 : 1], free = FPS_HUNTER_IDS.filter(h => !U.includes(h));
     const h = free[(Math.random() * free.length) | 0] || FPS_HUNTER_IDS[(Math.random() * 5) | 0];
-    used.push(h); return { kind: 'bot', name: names.pop() + ' [bot]', hunter: h };
+    U.push(h); return { kind: 'bot', name: names.pop() + ' [bot]', hunter: h };
   });
 }
 const pickMap = sel => FPS_MAP_IDS.includes(sel) ? sel : FPS_MAP_IDS[(Math.random() * FPS_MAP_IDS.length) | 0];
@@ -92,7 +99,7 @@ function startMatch(slotsIn, mapId) {
   AU.init();
   let slots = slotsIn;
   loadMap(mapId || pickMap(App.mapSel));
-  if (!slots) { App.role = 'solo'; const S = Array.from({ length: RULES.teamSize * 2 }, () => ({ kind: 'empty' })); S[0] = { kind: 'human', pid: 'me', name: myName(), hunter: App.hunter }; slots = botSlots(S); App.myPid = 'me'; }
+  if (!slots) { App.role = 'solo'; App.kind = 'solo'; App.vsBots = true; const S = Array.from({ length: RULES.teamSize * 2 }, () => ({ kind: 'empty' })); S[0] = Object.assign({ kind: 'human', pid: 'me', name: myName(), hunter: App.hunter }, myInfo()); slots = botSlots(S); App.myPid = 'me'; }
   App.slots = slots;
   App.G = new Game(App.M, slots.map((s, i) => ({ id: i + 1, pid: s.pid, name: s.name, bot: s.kind === 'bot', hunter: s.hunter })));
   App.me = App.G.players.find(p => p.pid === App.myPid) || App.G.players[0];
@@ -100,60 +107,81 @@ function startMatch(slotsIn, mapId) {
   App.feed = []; App.parts = []; App.evBuf = []; App.seq = 0; App.pend = []; App.outQ = []; App.evOut = []; App.snaps = []; App.estTick = 0; App.ended = false;
   const ev = App.G.drain(); if (App.role !== 'client') handleEvents(ev);
   $('#menu').style.display = 'none'; $('#room').classList.remove('show'); $('#end').classList.remove('show'); $('#hud').style.display = '';
-  App.running = true; App.lastSim = performance.now(); lockPointer();
+  App.running = true; App.lastSim = performance.now(); App.recorded = null; lockPointer();
+  if (typeof Social !== "undefined") Social.presence('game');
 }
 function quitMatch() {
+  // sair de uma ranqueada no meio conta como derrota
+  if (App.kind === 'ranked' && App.G && !App.ended && !App.recorded) recordMatch(false, true);
   App.running = false; App.G = null; App.me = null;
   $('#pause').classList.remove('show'); $('#hud').style.display = 'none'; $('#end').classList.remove('show'); document.exitPointerLock?.();
   if (App.role === 'host' || App.role === 'client') leaveRoom(); else $('#menu').style.display = '';
 }
 // manda um comando pontual (trocar arma, recarregar, comprar, habilidade...)
 function sendEv(o) { if (App.role === 'client') { App.evOut.push(o); if (o.buy) App.me.in.buyLocal = o.buy; } else Object.assign(App.me.in, o); }
-$('#btn-play').onclick = () => startMatch();
 $('#btn-resume').onclick = () => { $('#pause').classList.remove('show'); lockPointer(); };
 $('#btn-quit').onclick = () => quitMatch();
 
 // ---------------- salas online ----------------
 const emptySlots = () => Array.from({ length: RULES.teamSize * 2 }, () => ({ kind: 'empty' }));
 function roomMsg(t) { $('#rmsg').textContent = t || ''; }
-async function hostRoom() {
-  AU.init();
+async function hostRoom(kind = 'custom') {
+  AU.init(); App.kind = kind; App.expect = 0; App.search = null; App.vsBots = false;
   const code = Array.from({ length: 5 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[(Math.random() * 31) | 0]).join('');
   App.code = code; App.role = 'host'; App.myPid = 'host';
-  App.slots = emptySlots(); App.slots[0] = { kind: 'human', pid: 'host', name: myName(), hunter: App.hunter };
+  App.slots = emptySlots(); App.slots[0] = Object.assign({ kind: 'human', pid: 'host', name: myName(), hunter: App.hunter }, myInfo());
   try { App.tr = await Transport.host(App.net, 'T' + code, { onJoin() { }, onLeave: hostLeave, onMsg: hostMsg }); }
   catch (e) { App.role = 'solo'; $('#acctmsg').textContent = e.message; return; }
   openRoom();
 }
-async function joinRoom(code) {
+async function joinRoom(code, opt = {}) {
   code = (code || '').trim().toUpperCase(); if (code.length < 4) { $('#acctmsg').textContent = 'Digite o código da sala.'; return; }
   AU.init(); $('#acctmsg').textContent = 'Conectando...';
-  try { App.tr = await Transport.join(App.net, 'T' + code, { onMsg: clientMsg, onClose: clientClose }); }
+  const gen = App.gen = (App.gen || 0) + 1; // conexões antigas (ex.: ao trocar de sala na Ranqueada) são ignoradas
+  try { App.tr = await Transport.join(App.net, 'T' + code, { onMsg: m => gen === App.gen && clientMsg(m), onClose: () => gen === App.gen && clientClose() }); }
   catch (e) { $('#acctmsg').textContent = e.message; return; }
-  App.role = 'client'; App.code = code; App.myPid = null; App.slots = emptySlots();
-  App.tr.send({ t: 'hello', name: myName(), hunter: App.hunter });
+  App.role = 'client'; App.code = code; App.myPid = null; App.slots = emptySlots(); App.kind = opt.kind || 'custom'; App.moving = false; App.ended = false;
+  App.tr.send(Object.assign({ t: 'hello', name: myName(), hunter: App.hunter, team: opt.team ?? -1 }, myInfo()));
   $('#acctmsg').textContent = ''; openRoom();
 }
 function leaveRoom() {
+  if (App.search) stopSearch(true);
+  App.gen = (App.gen || 0) + 1;
   try { App.tr && App.tr.close(); } catch (e) { }
   App.tr = null; App.role = 'solo'; App.G = null; App.running = false;
   $('#room').classList.remove('show'); $('#hud').style.display = 'none'; $('#end').classList.remove('show'); $('#menu').style.display = '';
+  App.kind = 'solo'; App.expect = 0; if (typeof Social !== "undefined") Social.presence('menu');
 }
-function freeSlot() {
+function freeSlot(team) {
   const hum = t => App.slots.slice(t * RULES.teamSize, (t + 1) * RULES.teamSize).filter(x => x.kind === 'human').length;
-  const order = hum(0) <= hum(1) ? [0, 1] : [1, 0];
+  const order = team === 0 || team === 1 ? [team] : hum(0) <= hum(1) ? [0, 1] : [1, 0];
   for (const t of order) for (let i = t * RULES.teamSize; i < (t + 1) * RULES.teamSize; i++) if (App.slots[i].kind === 'empty') return i;
   return -1;
 }
 function hostMsg(pid, m) {
   if (m.t === 'hello') {
     if (App.G) { App.tr.send(pid, { t: 'full', why: 'A partida já começou. Espere acabar.' }); return; }
-    const i = freeSlot(); if (i < 0) { App.tr.send(pid, { t: 'full', why: 'A sala está cheia.' }); return; }
-    App.slots[i] = { kind: 'human', pid, name: String(m.name || 'Jogador').slice(0, 16), hunter: FPS_HUNTERS[m.hunter] ? m.hunter : 'brasa' };
-    App.tr.send(pid, { t: 'welcome', pid }); syncRoom(); return;
+    const info = { uid: m.uid || null, tag: String(m.tag || '').slice(0, 5), lvl: +m.lvl || 1, rank: m.rank ?? -1, mmr: +m.mmr || 1000, pl: +m.pl || 0 };
+    let team = -1;
+    if (App.kind === 'ranked') {
+      const no = why => App.tr.send(pid, { t: 'full', why });
+      if (App.net !== 'local' && info.lvl < (window.RANKED_MIN_LEVEL || 15)) return no(`A Ranqueada libera no nível ${window.RANKED_MIN_LEVEL || 15} de conta.`);
+      if (m.team === 1 && App.expect) team = 1; // grupo adversário chegando da fila
+      else {
+        if (App.search || App.expect) return no('Esse grupo já está na fila. Peça para cancelarem a busca.');
+        team = 0;
+        const party = App.slots.slice(0, RULES.teamSize).filter(x => x.kind === 'human');
+        if (!partyAllowed(party.concat([info]))) return no('Diferença de elo grande demais: o grupo pode ter no máximo 1 elo de diferença.');
+      }
+    }
+    const i = freeSlot(team); if (i < 0) { App.tr.send(pid, { t: 'full', why: App.kind === 'ranked' ? 'O grupo está cheio (máx. 5).' : 'A sala está cheia.' }); return; }
+    App.slots[i] = Object.assign({ kind: 'human', pid, name: String(m.name || 'Jogador').slice(0, 16), hunter: FPS_HUNTERS[m.hunter] ? m.hunter : 'brasa' }, info);
+    App.tr.send(pid, { t: 'welcome', pid, kind: App.kind }); syncRoom();
+    if (App.kind === 'ranked' && App.expect && App.slots.filter(x => x.kind === 'human').length >= App.expect) setTimeout(hostStart, 1500);
+    return;
   }
   if (m.t === 'hunter') { const sl = App.slots.find(x => x.pid === pid); if (sl && FPS_HUNTERS[m.h] && !App.G) { sl.hunter = m.h; syncRoom(); } return; }
-  if (m.t === 'move') { moveSlot(pid, m.i); return; }
+  if (m.t === 'move') { if (App.kind !== 'ranked') moveSlot(pid, m.i); return; }
   if (m.t === 'in' && App.G) {
     const p = App.G.players.find(q => q.pid === pid); if (!p || p.bot) return;
     p.netQ = p.netQ || []; for (const a of m.L) p.netQ.push(a);
@@ -172,22 +200,32 @@ function moveSlot(pid, i) {
   const j = App.slots.findIndex(x => x.pid === pid); if (j < 0) return;
   App.slots[i] = App.slots[j]; App.slots[j] = { kind: 'empty' }; syncRoom();
 }
-function syncRoom() { if (App.role === 'host' && App.tr) App.tr.broadcast({ t: 'room', slots: App.slots, map: App.mapSel }); renderRoom(); }
+function syncRoom() { if (App.role === 'host' && App.tr) App.tr.broadcast({ t: 'room', slots: App.slots, map: App.mapSel, kind: App.kind, expect: App.expect, search: App.search ? App.search.t0 : 0 }); renderRoom(); }
 function clientMsg(m) {
   switch (m.t) {
-    case 'welcome': App.myPid = m.pid; renderRoom(); break;
-    case 'room': App.slots = m.slots; App.mapSel = m.map || 'random'; renderRoom(); break;
+    case 'welcome': App.myPid = m.pid; App.kind = m.kind || App.kind; if (typeof Social !== "undefined") Social.presence('room'); renderRoom(); break;
+    case 'room': App.slots = m.slots; App.mapSel = m.map || 'random'; App.kind = m.kind || App.kind; App.expect = m.expect || 0; App.searchT0 = m.search || 0; renderRoom(); break;
+    case 'goto': // o líder do grupo achou partida na sala de outro grupo
+      App.moving = true; App.gen++;
+      try { App.tr.close(); } catch (e) { }
+      App.tr = null; App.role = 'solo';
+      setTimeout(() => joinRoom(m.code, { team: 1, kind: 'ranked' }), 900);
+      break;
     case 'full': leaveRoom(); $('#acctmsg').textContent = m.why; break;
-    case 'start': startMatch(m.slots, m.map); break;
+    case 'start': App.vsBots = !!m.vsBots; startMatch(m.slots, m.map); break;
     case 's': if (App.G) App.snaps.push(m); break;
     case 'back': App.running = false; App.G = null; $('#hud').style.display = 'none'; $('#end').classList.remove('show'); document.exitPointerLock?.(); openRoom(); break;
   }
 }
-function clientClose() { const inGame = !!App.G; leaveRoom(); $('#acctmsg').textContent = inGame ? 'O dono da sala saiu. A partida acabou.' : 'Conexão com a sala perdida.'; }
+function clientClose() {
+  if (App.moving) return;
+  if (App.ended) { App.tr = null; App.role = 'solo'; return; } // partida já acabou: fica na tela final
+  const inGame = !!App.G; leaveRoom(); $('#acctmsg').textContent = inGame ? 'O dono da sala saiu. A partida acabou.' : 'Conexão com a sala perdida.'; }
 function hostStart() {
   if (App.role !== 'host' || App.G) return;
-  const S = botSlots(App.slots), map = pickMap(App.mapSel);
-  App.tr.broadcast({ t: 'start', slots: S, map });
+  if (App.kind === 'ranked') { if (App.search) stopSearch(true); else Queue.cancel(App.code); App.expect = 0; }
+  const S = botSlots(App.slots), map = App.kind === 'ranked' ? pickMap('random') : pickMap(App.mapSel);
+  App.tr.broadcast({ t: 'start', slots: S, map, vsBots: !!App.vsBots });
   startMatch(S, map);
 }
 function backToRoom() { // depois da partida, o dono leva todos de volta para a sala
@@ -195,23 +233,32 @@ function backToRoom() { // depois da partida, o dono leva todos de volta para a 
   App.slots = App.slots.map(s => s.kind === 'bot' ? { kind: 'empty' } : s);
   App.tr.broadcast({ t: 'back' }); openRoom(); syncRoom();
 }
-function openRoom() { $('#menu').style.display = 'none'; $('#room').classList.add('show'); renderRoom(); }
+function openRoom() { $('#menu').style.display = 'none'; $('#room').classList.add('show'); if (typeof Social !== "undefined") Social.presence('room'); renderRoom(); }
 function renderRoom() {
   if (!$('#room').classList.contains('show')) return;
   if (!App.slots) App.slots = emptySlots();
   const hide = App.hideCode;
   $('#rcode').textContent = hide ? '•••••' : App.code;
-  $('#btn-rstart').style.display = App.role === 'host' ? '' : 'none';
-  roomMsg(App.role === 'host' ? 'Passe o código para seus amigos. Vagas vazias viram bots.' : App.myPid ? 'Esperando o dono da sala começar...' : 'Entrando...');
+  const ranked = App.kind === 'ranked', duel = !ranked || App.expect > 0;
+  $('#rkind').textContent = ranked ? 'RANQUEADA · GRUPO' : 'SALA PERSONALIZADA';
+  $('#room').classList.toggle('ranked', ranked);
+  $('#btn-rstart').style.display = App.role === 'host' && !ranked ? '' : 'none';
+  $('#rmapbox').style.display = ranked ? 'none' : '';
+  $('.rvs').style.display = $('#rt1').style.display = duel ? '' : 'none';
+  roomMsg(ranked ? (App.expect ? 'Partida encontrada! Esperando o outro grupo entrar...' : App.role === 'host' ? 'Chame até 4 amigos pelo código ou pela lista de amigos e busque uma partida.' : 'Esperando o líder do grupo buscar partida...')
+    : App.role === 'host' ? 'Passe o código para seus amigos. Vagas vazias viram bots.' : App.myPid ? 'Esperando o dono da sala começar...' : 'Entrando...');
   for (const t of [0, 1]) {
     const el = $('#rt' + t);
-    el.innerHTML = `<h4 style="color:${TEAM_COL[t]}">${TEAM_NAME[t]}</h4>` + App.slots.slice(t * RULES.teamSize, (t + 1) * RULES.teamSize).map((x, k) => {
+    el.innerHTML = `<h4 style="color:${TEAM_COL[t]}">${ranked && !App.expect ? 'Seu grupo' : TEAM_NAME[t]}</h4>` + App.slots.slice(t * RULES.teamSize, (t + 1) * RULES.teamSize).map((x, k) => {
       const i = t * RULES.teamSize + k;
-      if (x.kind === 'empty') return `<div class="rs empty" data-i="${i}">+ vaga (bot) — clique para entrar</div>`;
-      return `<div class="rs${x.pid === App.myPid ? ' me' : ''}"><b>${esc(x.name)}${x.pid === App.myPid ? ' (você)' : x.pid === 'host' ? ' ★' : ''}</b><span>${HUNTERS[x.hunter].nome} · ${CLASSES[HUNTERS[x.hunter].classe].nome}</span></div>`;
+      if (x.kind === 'empty') return ranked ? `<div class="rs empty off">${t === 0 && !App.expect ? '+ vaga do grupo (amigo entra pelo código)' : 'vaga (bot)'}</div>` : `<div class="rs empty" data-i="${i}">+ vaga (bot) — clique para entrar</div>`;
+      const nm = typeof Social !== "undefined" ? Social.shownName(x) : x.name;
+      return `<div class="rs${x.pid === App.myPid ? ' me' : ''}">${x.rank != null ? `<canvas class="rsrk" data-rk="${x.rank}" title="${esc(rankName(x.rank))}"></canvas>` : ''}<div><b>${esc(nm)}${x.pid === App.myPid ? ' (você)' : x.pid === 'host' ? ' ★' : ''}</b><span>${HUNTERS[x.hunter].nome} · ${CLASSES[HUNTERS[x.hunter].classe].nome}${x.lvl ? ' · nível ' + x.lvl : ''}</span></div></div>`;
     }).join('');
-    el.querySelectorAll('.rs.empty').forEach(d => d.onclick = () => { if (App.role === 'host') moveSlot('host', +d.dataset.i); else App.tr.send({ t: 'move', i: +d.dataset.i }); });
+    el.querySelectorAll('.rs.empty:not(.off)').forEach(d => d.onclick = () => { if (App.role === 'host') moveSlot('host', +d.dataset.i); else App.tr.send({ t: 'move', i: +d.dataset.i }); });
+    el.querySelectorAll('canvas.rsrk').forEach(c => { c.width = c.height = 40; drawRankEmblem(c.getContext('2d'), +c.dataset.rk, 40); });
   }
+  renderQueue();
   $('#rmap').innerHTML = mapCards(App.role === 'host');
   if (App.role === 'host') $('#rmap').querySelectorAll('[data-map]').forEach(d => d.onclick = () => { App.mapSel = d.dataset.map; try { localStorage.setItem('ruptura-fps-map', App.mapSel); } catch (e) { } syncRoom(); });
   $('#rpick').innerHTML = FPS_HUNTER_IDS.map(h => `<button class="rh${App.hunter === h ? ' on' : ''}" data-h="${h}" style="--c:${CLASSES[HUNTERS[h].classe].cor}">${HUNTERS[h].nome}<small>${CLASSES[HUNTERS[h].classe].nome}</small></button>`).join('');
@@ -221,11 +268,77 @@ function renderRoom() {
     else { App.tr.send({ t: 'hunter', h: App.hunter }); renderRoom(); }
   });
 }
+// ---------------- Ranqueada: fila de grupos (Firestore) ----------------
+// O líder do grupo entra na fila. Quando dois grupos se acham, o grupo que "reivindicou" vai
+// para a sala do outro (lado Crepúsculo). Vagas que sobram nos 5v5 viram bots.
+const VSBOTS_AFTER = 60; // segundos na fila até liberar "jogar contra bots"
+function partyOf() { return App.slots.slice(0, RULES.teamSize).filter(x => x.kind === 'human'); }
+async function startSearch() {
+  if (App.role !== 'host' || App.kind !== 'ranked' || App.search || App.expect) return;
+  const party = partyOf();
+  if (!partyAllowed(party)) return roomMsg('Diferença de elo grande demais no grupo (máx. 1 elo).');
+  if (!App.testQueue && (App.net === 'local' || !Account.db)) { App.search = { t0: Date.now(), local: true }; syncRoom(); return; }
+  try { await Queue.enter(App.code, party); } catch (e) { return roomMsg('Erro ao entrar na fila: ' + e.message); }
+  const S = App.search = { t0: Date.now(), busy: false };
+  S.unsub = Queue.watch(App.code, d => {
+    // só o grupo "reivindicado" recebe guestSize; quem reivindicou segue pelo tryMatch
+    if (App.search !== S || !d || d.state !== 'matched' || S.claimer || !d.guestSize) return;
+    // outro grupo nos encontrou: esta sala vira a sala da partida
+    stopSearch(false); App.expect = partyOf().length + (d.guestSize || 1); syncRoom();
+    setTimeout(() => { if (!App.G && App.expect && App.role === 'host') hostStart(); }, 25000);
+  });
+  S.iv = setInterval(async () => {
+    if (App.search !== S || S.busy) return;
+    S.busy = true;
+    try { const code = await Queue.tryMatch(App.code, (Date.now() - S.t0) / 1000); if (code && App.search === S) { S.claimer = true; goToMatch(code); } }
+    catch (e) { console.warn(e); }
+    S.busy = false;
+  }, 2500);
+  S.hb = setInterval(() => Queue.heartbeat(App.code), 15000);
+  syncRoom();
+}
+function stopSearch(del) {
+  const S = App.search; if (!S) return;
+  clearInterval(S.iv); clearInterval(S.hb); if (S.unsub) try { S.unsub(); } catch (e) { }
+  if (del && !S.local) Queue.cancel(App.code);
+  App.search = null;
+}
+function cancelSearch() { stopSearch(true); syncRoom(); }
+function rankedVsBots() { stopSearch(true); App.vsBots = true; hostStart(); }
+async function goToMatch(code) {
+  stopSearch(true);
+  App.tr.broadcast({ t: 'goto', code });
+  await new Promise(r => setTimeout(r, 600));
+  App.moving = true;
+  try { App.tr.close(); } catch (e) { }
+  App.tr = null; App.role = 'solo';
+  joinRoom(code, { team: 1, kind: 'ranked' });
+}
+function renderQueue() {
+  const el = $('#rq'); if (!el) return;
+  if (App.kind !== 'ranked') { el.innerHTML = ''; el.dataset.sig = ''; return; }
+  const t0 = App.role === 'host' ? (App.search && App.search.t0) : App.searchT0;
+  const P = Account.profile;
+  const me = P ? `<div class="rqme"><canvas id="rq-emb" width="56" height="56"></canvas><div><b>${esc(rankName(P.rank))}</b><small>${P.placements < 5 ? `Colocação ${P.placements}/5` : `${P.rr} / 100 RR`}</small></div></div>` : '';
+  const sec0 = t0 ? Math.floor((Date.now() - t0) / 1000) : 0;
+  const sig = [App.role, App.expect, !!t0, sec0 >= VSBOTS_AFTER || !!(App.search && App.search.local), P && P.rank, P && P.rr].join('|');
+  if (el.dataset.sig === sig && t0 && !App.expect) { const sb = el.querySelector('.srch'); if (sb) sb.textContent = `Procurando partida… ${Math.floor(sec0 / 60)}:${String(sec0 % 60).padStart(2, '0')}`; return; }
+  el.dataset.sig = sig;
+  let mid = '';
+  if (App.expect) mid = '<b class="found">PARTIDA ENCONTRADA</b>';
+  else if (t0) {
+    const sec = Math.floor((Date.now() - t0) / 1000);
+    mid = `<b class="srch">Procurando partida… ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}</b>` + (App.role === 'host' ? `<button class="btn" id="rq-cancel">Cancelar</button>${sec >= VSBOTS_AFTER || (App.search && App.search.local) ? '<button class="btn ghost" id="rq-bots" title="Ninguém encontrado? Joga contra bots valendo metade do RR">Jogar contra bots (½ RR)</button>' : ''}` : '');
+  } else mid = App.role === 'host' ? '<button class="btn rk big" id="rq-go">Buscar partida</button>' : '<span class="wait">O líder do grupo inicia a busca.</span>';
+  el.innerHTML = me + `<div class="rqmid">${mid}</div><div class="rqinfo">Primeiro a 7 · troca de lado no round 6 · prorrogação até abrir 2<br>Grupo de até 5 · no máximo 1 elo de diferença</div>`;
+  const c = $('#rq-emb'); if (c && P) drawRankEmblem(c.getContext('2d'), P.rank, 56);
+  if ($('#rq-go')) $('#rq-go').onclick = () => startSearch();
+  if ($('#rq-cancel')) $('#rq-cancel').onclick = () => cancelSearch();
+  if ($('#rq-bots')) $('#rq-bots').onclick = () => rankedVsBots();
+}
+setInterval(() => { if ($('#room').classList.contains('show') && App.kind === 'ranked' && !App.expect && (App.search || App.searchT0)) renderQueue(); }, 1000);
 // mantém a conexão viva enquanto espera na sala
 setInterval(() => { if (App.role === 'client' && App.tr && !App.running) try { App.tr.send({ t: 'ka' }); } catch (e) { } }, 2000);
-$('#btn-host').onclick = () => hostRoom();
-$('#btn-join').onclick = () => joinRoom($('#in-code').value);
-$('#in-code').onkeydown = e => { if (e.key === 'Enter') joinRoom($('#in-code').value); };
 $('#btn-rstart').onclick = () => hostStart();
 $('#btn-rleave').onclick = () => leaveRoom();
 $('#btn-rcopy').onclick = () => { try { navigator.clipboard.writeText(App.code); $('#btn-rcopy').textContent = 'Copiado!'; setTimeout(() => $('#btn-rcopy').textContent = 'Copiar', 1200); } catch (e) { } };
@@ -465,11 +578,30 @@ function showEnd(won) {
   document.exitPointerLock?.(); App.ended = true;
   const G = App.G, me = App.me;
   $('#end').classList.add('show');
-  const again = App.role === 'host' ? 'Voltar para a sala' : App.role === 'client' ? '' : 'Jogar de novo';
-  $('#end').innerHTML = `<div class="endbox"><h1 class="${won ? 'win' : 'lose'}">${won ? 'VITÓRIA' : 'DERROTA'}</h1><div class="sub">${G.score[me.team]} × ${G.score[1 - me.team]}</div>${boardHTML()}<div class="row"><button class="btn" id="btn-endq">Sair</button>${again ? `<button class="btn gold" id="btn-again">${again}</button>` : '<span class="wait">Esperando o dono da sala...</span>'}</div></div>`;
+  const again = App.kind === 'ranked' ? 'Nova ranqueada' : App.role === 'host' ? 'Voltar para a sala' : App.role === 'client' ? '' : 'Jogar de novo';
+  $('#end').innerHTML = `<div class="endbox"><h1 class="${won ? 'win' : 'lose'}">${won ? 'VITÓRIA' : 'DERROTA'}</h1><div class="sub">${KIND_NAME[App.kind] || ''} · ${G.score[me.team]} × ${G.score[1 - me.team]}</div><div id="rewards" class="rewards"></div>${boardHTML()}<div class="row"><button class="btn" id="btn-endq">Sair</button>${again ? `<button class="btn gold" id="btn-again">${again}</button>` : '<span class="wait">Esperando o dono da sala...</span>'}</div></div>`;
   $('#btn-endq').onclick = () => quitMatch();
-  if ($('#btn-again')) $('#btn-again').onclick = () => { $('#end').classList.remove('show'); if (App.role === 'host') backToRoom(); else startMatch(); };
-  if (window.Account && Account.logged && Account.record) { try { Account.record({ mode: 'fps', won, my: G.score[me.team], opp: G.score[1 - me.team], hunter: me.hunter, kills: me.kills, deaths: me.deaths, dmg: me.dmg, heal: 0, perf: 1, oppMMR: 1000, vsBots: true }); } catch (e) { console.warn(e); } }
+  if ($('#btn-again')) $('#btn-again').onclick = () => {
+    $('#end').classList.remove('show');
+    if (App.kind === 'ranked') { quitMatch(); Social.ranked(); }
+    else if (App.role === 'host') backToRoom(); else startMatch();
+  };
+  recordMatch(won);
+}
+// registra a partida na conta (XP, estatísticas e, na Ranqueada, RR/MMR)
+function recordMatch(won, quit) {
+  const G = App.G, me = App.me; if (!G || !me || App.recorded || !Account.profile) return;
+  if (App.net === 'local' && App.kind === 'ranked') return;
+  const mine = G.players.filter(p => p.team === me.team), opp = G.players.filter(p => p.team !== me.team);
+  const sc = p => p.dmg + p.kills * 150 + (p.plants || 0) * 120 + (p.defuses || 0) * 150;
+  const avg = mine.reduce((a, p) => a + sc(p), 0) / mine.length || 1;
+  const mmrOf = p => { const s = App.slots && App.slots[p.id - 1]; return s && s.mmr || 1000; };
+  const r = { mode: App.kind === 'ranked' ? 'ranked' : App.kind === 'custom' ? 'standard' : 'training', won, my: G.score[me.team], opp: G.score[1 - me.team],
+    hunter: me.hunter, kills: me.kills, deaths: me.deaths, dmg: me.dmg, heal: 0, perf: quit ? 0.5 : sc(me) / avg,
+    oppMMR: opp.reduce((a, p) => a + mmrOf(p), 0) / (opp.length || 1), vsBots: !!App.vsBots || opp.every(p => p.bot) };
+  if (quit) { r.won = false; r.my = Math.min(r.my, r.opp); }
+  App.recorded = Account.record(r);
+  App.recorded.then(out => { if (!quit && typeof Social !== "undefined") Social.rewards(out, App.kind); }).catch(e => console.warn(e));
 }
 function boardHTML() {
   const G = App.G, me = App.me;
@@ -631,15 +763,3 @@ function bindSettings(s) {
 bindSettings($('#fpset')); bindSettings($('#fpset2'));
 buildMenu(); buildMaps();
 
-// ---------------- conta: só quem está logado joga ----------------
-(function gate() {
-  const play = { set disabled(v) { for (const id of ['#btn-play', '#btn-host', '#btn-join']) $(id).disabled = v; } };
-  if (!window.Account || !window.FIREBASE_CONFIG || App.net === 'local') { play.disabled = false; return; }
-  play.disabled = true; $('#acctmsg').textContent = 'Verificando sua conta...';
-  Account.on(() => {
-    if (Account.logged) { play.disabled = false; $('#acctmsg').innerHTML = `Conectado como <b>${esc(Account.profile.name)}</b>${Account.profile.tag ? ' #' + esc(Account.profile.tag) : ''}`; }
-    else if (Account.enabled === false || Account.error) { play.disabled = true; $('#acctmsg').innerHTML = `${esc(Account.error || 'Login indisponível')} · <a href="index.html">voltar</a>`; }
-    else { play.disabled = true; $('#acctmsg').innerHTML = 'Entre com sua conta Google na <a href="index.html">página inicial</a> para jogar.'; }
-  });
-  Account.init();
-})();
