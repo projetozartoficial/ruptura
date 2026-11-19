@@ -16,7 +16,7 @@ class Game {
     this.grenades = []; this.zones = []; this.smokes = []; this.temp = []; this.tracers = [];
     this.drops = []; this.nucleo = null; this.revealTeam = [0, 0];
     this.phase = 'pre'; this.phaseT = 0; this.winner = -1; this.ot = false;
-    this.solids = M.solids.slice();
+    this.solids = M.solidList();
     this.startRound(true);
   }
   newPlayer(s, i) {
@@ -53,8 +53,10 @@ class Game {
     for (const p of this.players) {
       const side = p.team === att ? 'atk' : 'def', [c, r] = sp[side][used[side]++ % sp[side].length];
       if (!p.alive) { p.guns = { 1: null, 2: { id: 'lasca', ammo: 12, res: 36 } }; p.armor = 0; p.ab.c = 0; p.ab.q = 0; }
-      Object.assign(p, { x: (c + 0.5) * this.M.cell + rnd(-0.4, 0.4), y: 0, z: (r + 0.5) * this.M.cell + rnd(-0.4, 0.4), vx: 0, vy: 0, vz: 0, hp: 100, alive: true, crouch: 0,
-        yaw: side === 'atk' ? 0 : Math.PI, pitch: 0, blindT: 0, slowT: 0, stunT: 0, revealT: 0, dashT: 0, healT: 0, nucleo: false, reloadT: 0, recoil: 0, zoom: false, useT: 0, roundKills: 0, brain: null });
+      const sx = (c + 0.5) * this.M.cell, sz = (r + 0.5) * this.M.cell, S = this.M.siteIds.map(k => this.M.sites[k]);
+      const tx = S.reduce((a, q) => a + q.x, 0) / S.length, tz = S.reduce((a, q) => a + q.z, 0) / S.length;
+      Object.assign(p, { x: sx + rnd(-0.4, 0.4), y: 0, z: sz + rnd(-0.4, 0.4), vx: 0, vy: 0, vz: 0, hp: 100, alive: true, crouch: 0,
+        yaw: Math.atan2(tx - sx, -(tz - sz)), pitch: 0, blindT: 0, slowT: 0, stunT: 0, revealT: 0, dashT: 0, healT: 0, nucleo: false, reloadT: 0, recoil: 0, zoom: false, useT: 0, roundKills: 0, brain: null });
       p.ab.e = FPS_HUNTERS[p.hunter].e.free;
       for (const k of [1, 2]) { const g = p.guns[k]; if (g) { const W = WEAPONS[g.id]; g.ammo = W.mag; g.res = Math.max(g.res, W.res); } }
       p.cur = p.guns[1] ? 1 : 2;
@@ -64,7 +66,7 @@ class Game {
     const carrier = atks.find(p => !p.bot) && Math.random() < 0.5 ? atks.find(p => !p.bot) : atks[(Math.random() * atks.length) | 0];
     if (carrier) carrier.nucleo = true;
     this.nucleo = null; this.drops = []; this.grenades = []; this.zones = []; this.smokes = []; this.temp = []; this.revealTeam = [0, 0];
-    this.solids = this.M.solids.slice();
+    resetWorld(this.M); this.solids = this.M.solidList();
     this.phase = 'buy'; this.phaseT = RULES.buyTime; this.winner = -1; this.roundWinner = -1;
     this.plantSite = null; this.defuseProg = 0; this.defuseHalf = false;
     this.emit({ k: 'round', n: this.round, att, half, ot: this.ot });
@@ -135,16 +137,38 @@ class Game {
     const I = p.in;
     p.blindT = Math.max(0, p.blindT - dt); p.slowT = Math.max(0, p.slowT - dt); p.stunT = Math.max(0, p.stunT - dt); p.revealT = Math.max(0, p.revealT - dt);
     p.fireCd = Math.max(0, p.fireCd - dt); p.switchT = Math.max(0, p.switchT - dt);
+    for (const k of ['frenzyT', 'wardT', 'steadyT', 'saveT', 'spdT']) if (p[k] > 0) p[k] = Math.max(0, p[k] - dt);
     if (!p.alive) return;
+    // atropelar durante investida
+    if (p.dashT > 0 && p.dashHit) for (const q of this.players) {
+      if (!q.alive || q.team === p.team || p.dashHit.hit.has(q.id) || Math.hypot(q.x - p.x, q.z - p.z) > 1.3) continue;
+      p.dashHit.hit.add(q.id); this.hurt(q, p.dashHit.dmg, p, 'body', p.dashHit.w); q.stunT = Math.max(q.stunT, p.dashHit.stun);
+      const a = Math.atan2(q.x - p.x, q.z - p.z); q.vx = Math.sin(a) * 9; q.vz = Math.cos(a) * 9; q.dashT = 0.2;
+      if (p.dashHit.stop) { p.dashT = 0; p.vx *= 0.2; p.vz *= 0.2; }
+    }
+    if (p.dashT <= 0) p.dashHit = null;
+    if (p.leapStun && p.onGround && this.t - p.leapT > 0.2) { p.leapStun = false; for (const q of this.players) if (q.alive && q.team !== p.team && Math.hypot(q.x - p.x, q.z - p.z) < 4.2) { q.stunT = Math.max(q.stunT, 1.3); this.hurt(q, 30, p, 'body', 'cometa'); } this.emit({ k: 'boom', x: p.x, y: 0.3, z: p.z, r: 4.2, kind: 'star' }); }
     if (p.healT > 0) { const h = Math.min(dt * 20, p.healT); p.healT -= h; p.hp = Math.min(100, p.hp + h); }
     p.yaw = I.yaw; p.pitch = clamp(I.pitch, -1.5, 1.5);
     // compra
     if (I.buy) { this.buy(p, I.buy); I.buy = null; }
     this.moveStep(p, I, dt);
-    // passos
+    if (p.y < -7) { this.hurt(p, 999, null, 'body', 'abismo'); return; }
+    // portais
+    p.portalCd = Math.max(0, (p.portalCd || 0) - dt);
+    const pch = this.M.chAt(p.x, p.z);
+    if ((pch === 'P' || pch === 'Q') && p.portalCd <= 0) {
+      const [c, r] = this.M.cellOf(p.x, p.z), other = this.M.portals[pch].find(q => q.c !== c || q.r !== r);
+      if (other) {
+        this.emit({ k: 'portal', id: p.id, x: p.x, z: p.z, x2: other.ex, z2: other.ez });
+        p.x = other.ex; p.z = other.ez; p.portalCd = 1.2;
+        if (p.brain && p.brain.path) { const i = p.brain.path.findIndex(w => Math.hypot(w[0] - other.x, w[1] - other.z) < 0.5); if (i >= 0) p.brain.path = p.brain.path.slice(i + 1); }
+      }
+    }    // passos
     const hs = Math.hypot(p.vx, p.vz);
-    p.stepAcc = (p.stepAcc || 0) + (p.onGround && !I.walk && p.crouch < 0.5 && hs > 4 ? hs * dt : 0);
-    if (p.stepAcc > 2.4) { p.stepAcc = 0; this.emit({ k: 'step', id: p.id, x: p.x, z: p.z }); }
+    const wet = this.M.chAt(p.x, p.z) === 'w';
+    p.stepAcc = (p.stepAcc || 0) + (p.onGround && ((!I.walk && p.crouch < 0.5 && hs > 4) || (wet && hs > 1)) ? hs * dt : 0);
+    if (p.stepAcc > 2.4) { p.stepAcc = 0; this.emit({ k: 'step', id: p.id, x: p.x, z: p.z, w: wet ? 1 : 0 }); if (wet) this.alertBots(p, 18); }
     // troca de arma
     if (I.slot && I.slot !== p.cur && (I.slot === 3 || p.guns[I.slot]) && p.stunT <= 0) { p.cur = I.slot; p.reloadT = 0; p.switchT = 0.55; p.zoom = false; p.burst = 0; this.emit({ k: 'swap', id: p.id }); }
     I.slot = 0;
@@ -183,8 +207,12 @@ class Game {
     let sp = I.walk ? MOVE.walk : MOVE.run;
     if (p.crouch > 0.5) sp = MOVE.crouch;
     if (p.slowT > 0) sp *= 1 - p.slowAmt;
+    const floorCh = this.M.chAt(p.x, p.z), onIce = floorCh === 'i' && p.onGround;
+    if (floorCh === 'w' && p.y < 0.2) sp *= 0.72;
+    if (p.frenzyT > 0) sp *= 1.3;
+    if (p.spdT > 0) sp *= 1.25;
     if (p.stunT > 0) sp *= 0.35;
-    const W = this.curW(p); if (W && W.cat === 'Pesadas') sp *= 0.92; if (W && W.zoom && p.zoom) sp *= 0.6;
+    const W = this.curW(p); if (W && W.heavy) sp *= W.heavy; if (W && W.zoom && p.zoom) sp *= 0.6;
     const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw);
     let mx = I.mx, mz = I.mz; const ml = Math.hypot(mx, mz); if (ml > 1) { mx /= ml; mz /= ml; }
     // mz>0 = para frente
@@ -192,7 +220,7 @@ class Game {
     const tx = wx * sp, tz = wz * sp;
     if (p.dashT > 0) { p.dashT -= dt; }
     else {
-      const a = (p.onGround ? MOVE.accel : MOVE.air) * dt;
+      const a = (p.onGround ? (onIce ? 7 : MOVE.accel) : MOVE.air) * dt;
       const dvx = tx - p.vx, dvz = tz - p.vz, dl = Math.hypot(dvx, dvz);
       if (dl <= a) { p.vx = tx; p.vz = tz; } else { p.vx += dvx / dl * a; p.vz += dvz / dl * a; }
     }
@@ -218,7 +246,8 @@ class Game {
       else { if (d < 0) { p.y = b.y1; p.vy = 0; p.onGround = true; } else { p.y = b.y0 - h - 1e-4; p.vy = 0; } }
     }
     if (ax === 'y') {
-      if (p.y <= 0) { p.y = 0; p.vy = Math.max(0, p.vy); p.onGround = true; }
+      if (p.y <= 0 && this.M.chAt(p.x, p.z) !== 'o') { p.y = 0; p.vy = Math.max(0, p.vy); p.onGround = true; }
+      else if (p.y <= 0) p.onGround = false;
       else if (d > 0) p.onGround = false; else this.groundCheck(p);
     }
     if (lock && ax !== 'y') {
@@ -228,7 +257,7 @@ class Game {
     }
   }
   groundCheck(p) {
-    if (p.y <= 0.001) { p.onGround = true; return; }
+    if (p.y <= 0.001 && this.M.chAt(p.x, p.z) !== 'o') { p.onGround = true; return; }
     let g = false; for (const b of this.solids) if (aabbHit(b, p.x - PH.R, p.y - 0.05, p.z - PH.R, p.x + PH.R, p.y, p.z + PH.R) && b.y1 <= p.y + 0.01) { g = true; break; }
     p.onGround = g;
   }
@@ -239,11 +268,15 @@ class Game {
     let s = W.spread + W.mv * Math.max(0, hs - 0.25) + (p.onGround ? 0 : 7) + p.burst * (W.auto ? 0.16 : 0.5);
     if (W.unscoped && !p.zoom) s += W.unscoped;
     if (p.crouch > 0.5 && p.onGround) s *= 0.75;
+    if (p.steadyT > 0) s = W.spread * 0.2;
     return s * Math.PI / 180;
   }
   shoot(p, G) {
     const W = WEAPONS[G.id];
-    G.ammo--; p.fireCd = 1 / W.rps; p.lastShot = this.t;
+    G.ammo--; p.lastShot = this.t;
+    // metralhadoras aceleram enquanto atiram
+    const rps = W.rpsMax ? W.rps + (W.rpsMax - W.rps) * Math.min(1, p.burst / 10) : W.rps;
+    p.fireCd = 1 / (rps * (p.frenzyT > 0 ? 1.25 : 1));
     const sp = this.spreadOf(p, W);
     const ey = this.eye(p);
     const n = W.pellets || 1;
@@ -260,22 +293,24 @@ class Game {
       const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * sp;
       const yaw = p.yaw + Math.cos(a) * r, pitch = p.pitch + p.recoil * Math.PI / 180 + Math.sin(a) * r;
       const d = fwdVec(yaw, pitch);
-      const h = this.trace(p.x, ey, p.z, d[0], d[1], d[2], 200, p);
+      const h = p.pierceN > 0 ? this.tracePierce(p.x, ey, p.z, d[0], d[1], d[2], 200, p) : this.trace(p.x, ey, p.z, d[0], d[1], d[2], 200, p);
       hits.push(h);
       if (k < 3) trs.push([+p.x.toFixed(2), +(ey - 0.12).toFixed(2), +p.z.toFixed(2), +(p.x + d[0] * h.t).toFixed(2), +(ey + d[1] * h.t).toFixed(2), +(p.z + d[2] * h.t).toFixed(2)]);
       if (h.p) {
         const zone = h.zone, dmg0 = W.dmg[zone === 'head' ? 0 : zone === 'body' ? 1 : 2];
         let dmg = dmg0; if (W.falloff && h.t > W.falloff) dmg *= Math.max(0.3, 1 - (h.t - W.falloff) / 20);
+        if (p.pierceN > 0) dmg *= 1.25;
         this.hurt(h.p, dmg, p, zone, G.id);
-      }
+      } else if (h.box && h.box.k === 'wood') this.damageWood(h.box.bid, W.dmg[1]);
     }
     if (restore) restore();
-    p.recoil = Math.min(p.recoil + W.rec * (0.6 + Math.random() * 0.5), 9);
+    if (p.pierceN > 0) p.pierceN--;
+    p.recoil = Math.min(p.recoil + W.rec * (0.6 + Math.random() * 0.5) * (p.steadyT > 0 ? 0.5 : 1), 9);
     p.burst = Math.min(p.burst + 1, 12);
     if (W.zoom && p.zoom && W.rps < 1) p.zoom = false;
     for (const t of trs) this.tracers.push({ x0: t[0], y0: t[1], z0: t[2], x1: t[3], y1: t[4], z1: t[5], t: 0.06, owner: p.id });
     this.emit({ k: 'shot', id: p.id, w: G.id, x: +p.x.toFixed(1), z: +p.z.toFixed(1), tr: trs });
-    this.alertBots(p, 40);
+    this.alertBots(p, W.silent ? 14 : 40);
   }
   melee(p) {
     p.fireCd = 1 / WEAPONS.faca.rps; p.lastShot = this.t;
@@ -285,17 +320,23 @@ class Game {
   }
   // raio contra paredes, barreiras e jogadores. vision=true também para em névoas
   trace(ox, oy, oz, dx, dy, dz, max, ignore, vision) {
-    let best = max, bp = null, zone = null;
-    for (const b of this.solids) { const t = rayBox(ox, oy, oz, dx, dy, dz, b, best); if (t >= 0 && t < best) best = t; }
+    let best = max, bp = null, zone = null, bb = null;
+    for (const b of this.solids) { const t = rayBox(ox, oy, oz, dx, dy, dz, b, best); if (t >= 0 && t < best) { best = t; bb = b; } }
     if (vision) {
       for (const s of this.smokes) { const t = raySphere(ox, oy, oz, dx, dy, dz, s.x, s.y, s.z, s.r, best); if (t >= 0 && t < best) best = t; }
       for (const w of this.temp) if (w.vis) { const t = rayBox(ox, oy, oz, dx, dy, dz, w, best); if (t >= 0 && t < best) best = t; }
     }
     if (vision !== 'walls') for (const q of this.players) {
       if (!q.alive || q === ignore) continue;
-      for (const [z, hb] of this.hitboxes(q)) { const t = rayBox(ox, oy, oz, dx, dy, dz, hb, best); if (t >= 0 && t < best) { best = t; bp = q; zone = z; } }
+      for (const [z, hb] of this.hitboxes(q)) { const t = rayBox(ox, oy, oz, dx, dy, dz, hb, best); if (t >= 0 && t < best) { best = t; bp = q; zone = z; bb = null; } }
     }
-    return { t: best, p: bp, zone };
+    return { t: best, p: bp, zone, box: bb };
+  }
+  tracePierce(ox, oy, oz, dx, dy, dz, max, ignore) { // atravessa paredes (Bala Perfurante)
+    let best = max, bp = null, zone = null;
+    for (const q of this.players) { if (!q.alive || q === ignore) continue; for (const [z, hb] of this.hitboxes(q)) { const t = rayBox(ox, oy, oz, dx, dy, dz, hb, best); if (t >= 0 && t < best) { best = t; bp = q; zone = z; } } }
+    if (!bp) return this.trace(ox, oy, oz, dx, dy, dz, max, ignore);
+    return { t: best, p: bp, zone, box: null };
   }
   hitboxes(q) {
     const h = this.height(q), hx = 0.17, bx = 0.3;
@@ -307,19 +348,23 @@ class Game {
   }
   hurt(t, dmg, src, zone, wid, tick) {
     if (!t.alive || (this.phase === 'end' && wid !== 'nucleo')) return;
-    if (src && src.team === t.team && src !== t && wid !== 'nucleo') return; // sem fogo amigo
+    // fogo amigo: tiros e faca não ferem aliados; habilidades ferem com metade do dano
+    if (src && src.team === t.team && src !== t && wid !== 'nucleo') { if (WEAPONS[wid]) return; dmg *= 0.5; }
     if (tick) { t.tickAcc = (t.tickAcc || 0) + dmg; if (t.tickAcc < 1) return; dmg = Math.floor(t.tickAcc); t.tickAcc -= dmg; }
     else dmg = Math.round(dmg);
+    if (t.wardT > 0) dmg = Math.round(dmg * 0.6);
     const a = Math.min(t.armor, dmg); t.armor -= a; const rest = dmg - a; t.hp -= rest;
     if (src && src !== t) { src.dmg += dmg; t.lastHitBy = src.id; }
     if (!tick || t.hp <= 0) this.emit({ k: 'hit', id: t.id, by: src ? src.id : 0, dmg, zone, x: t.x, y: t.y + (zone === 'head' ? 1.7 : 1.1), z: t.z, tick: !!tick });
     if (t.bot && src) { t.brain = t.brain || {}; t.brain.alert = { x: src.x, z: src.z, t: this.t }; }
+    if (t.hp <= 0 && t.saveT > 0 && wid !== 'nucleo' && wid !== 'abismo') { t.hp = 40; t.saveT = 0; this.emit({ k: 'saved', id: t.id }); return; }
     if (t.hp <= 0) this.kill(t, src, zone, wid);
   }
   kill(t, src, zone, wid) {
     t.alive = false; t.hp = 0; t.deaths++; t.zoom = false; t.useT = 0;
     let k = src && src !== t && src.team !== t.team ? src : null;
     if (!k && t.lastHitBy) { const q = this.byId(t.lastHitBy); if (q && q.team !== t.team) k = q; }
+    if (k && k.frenzyT > 0) k.hp = Math.min(100, k.hp + 50);
     if (k) { k.kills++; k.roundKills++; k.creds = Math.min(RULES.maxCreds, k.creds + RULES.kill); k.ult = Math.min(FPS_ULT[k.hunter], k.ult + 1); }
     t.ult = Math.min(FPS_ULT[t.hunter], t.ult + 1);
     // larga arma e Núcleo
@@ -389,7 +434,11 @@ class Game {
           p.defuses++; p.ult = Math.min(FPS_ULT[p.hunter], p.ult + 1); this.emit({ k: 'defused', id: p.id });
           this.nucleo.defused = true; p.useT = 0; this.endRound(1 - att, 'defuse');
         }
-      } else if (!p.usedPick) { if (this.pickupNear(p)) p.usedPick = true; }
+      } else if (!p.usedPick) {
+        const L = this.M.levers.find(l => Math.hypot(l.x - p.x, l.z - p.z) < 1.8);
+        if (L) { this.toggleDoor(L.door, p); p.usedPick = true; }
+        else if (this.pickupNear(p)) p.usedPick = true;
+      }
     } else p.usedPick = false;
     if (!busy) { if (p.useT > 0 && this.defuseHalf && p.team !== att && p.useT >= RULES.defuseTime / 2) p.useT = RULES.defuseTime / 2; else if (!(p.team !== att && p.useT >= RULES.defuseTime / 2 && this.defuseHalf)) p.useT = 0; }
   }
@@ -444,27 +493,42 @@ class Game {
       for (const p of this.players) {
         if (!p.alive || Math.hypot(p.x - z.x, p.z - z.z) > z.r || p.y > 2) continue;
         const enemy = p.team !== z.team;
-        if (z.alarm) { if (enemy) { p.revealT = Math.max(p.revealT, 3); p.slowT = Math.max(p.slowT, 2); p.slowAmt = Math.max(p.slowAmt, 0.5); z.t = 0; this.emit({ k: 'alarm', x: z.x, z: z.z, team: z.team }); } continue; }
-        if (z.dps && (enemy || p.id === z.owner)) this.hurt(p, z.dps * dt, this.byId(z.owner), 'body', z.kind, true); // dano contínuo
+        if (z.reveal && enemy) p.revealT = Math.max(p.revealT, 1);
+        if (z.pull && enemy) { const dx = z.x - p.x, dz = z.z - p.z, d = Math.hypot(dx, dz) || 1; p.x += dx / d * 3.2 * dt; p.z += dz / d * 3.2 * dt; }
+        if (z.ward && !enemy) { p.wardT = Math.max(p.wardT || 0, 0.3); if (p.hp < 100) p.hp = Math.min(100, p.hp + 10 * dt); }
+        if (z.alarm) { if (enemy) { if (z.kind === 'web') { p.slowT = Math.max(p.slowT, 2.5); p.slowAmt = 0.9; } p.revealT = Math.max(p.revealT, 3); p.slowT = Math.max(p.slowT, 2); p.slowAmt = Math.max(p.slowAmt, 0.5); z.t = 0; this.emit({ k: 'alarm', x: z.x, z: z.z, team: z.team }); } continue; }
+        if (z.dps) this.hurt(p, z.dps * dt, this.byId(z.owner), 'body', z.kind, true); // dano contínuo
         if (z.slow && enemy) { p.slowT = Math.max(p.slowT, 0.2); p.slowAmt = Math.max(p.slowAmt, z.slow); }
       }
     }
     this.zones = this.zones.filter(z => z.t > 0);
     for (const s of this.smokes) s.t -= dt; this.smokes = this.smokes.filter(s => s.t > 0);
     let ch = false; for (const w of this.temp) { w.t -= dt; if (w.t <= 0) ch = true; }
-    if (ch) { this.temp = this.temp.filter(w => w.t > 0); this.solids = this.M.solids.concat(this.temp.filter(w => w.solid)); }
+    if (ch) { this.temp = this.temp.filter(w => w.t > 0); this.rebuild(); }
   }
   explode(x, y, z, r, dmg, src, kind) {
     for (const p of this.players) {
       if (!p.alive) continue;
       const d = Math.hypot(p.x - x, p.y + 1 - y, p.z - z); if (d > r) continue;
-      if (p.team === src?.team && p !== src) continue;
       // precisa de linha livre até o alvo
       const dx = p.x - x, dy = p.y + 1 - y, dz = p.z - z, l = Math.hypot(dx, dy, dz) || 1;
       const h = this.trace(x, y + 0.2, z, dx / l, dy / l, dz / l, l, null, 'walls'); if (h.t < l - 0.4) continue;
       this.hurt(p, dmg * (1 - d / r * 0.65), src, 'body', kind);
     }
+    for (const b of this.M.breakables) if (b.hp > 0 && Math.hypot((b.box.x0 + b.box.x1) / 2 - x, (b.box.z0 + b.box.z1) / 2 - z) < r + 1) this.damageWood(b.id, dmg * 2);
     this.emit({ k: 'boom', x, y, z, r, kind });
+  }
+  rebuild() { this.solids = this.M.solidList().concat(this.temp.filter(w => w.solid)); }
+  damageWood(bid, dmg) {
+    const b = this.M.breakables[bid]; if (!b || b.hp <= 0) return;
+    b.hp -= dmg;
+    if (b.hp <= 0) { b.hp = 0; this.rebuild(); this.emit({ k: 'woodBreak', id: bid, x: (b.box.x0 + b.box.x1) / 2, z: (b.box.z0 + b.box.z1) / 2 }); }
+  }
+  toggleDoor(i, by) {
+    const d = this.M.doors[i]; if (!d || this.t < (d.cdT || 0)) return;
+    if (d.open) for (const q of this.players) if (q.alive && aabbHit(d.box, q.x - PH.R, q.y, q.z - PH.R, q.x + PH.R, q.y + 1.8, q.z + PH.R)) return; // não fecha em cima de alguém
+    d.open = !d.open; d.cdT = this.t + 2; this.rebuild();
+    this.emit({ k: 'door', i, open: d.open, x: (d.box.x0 + d.box.x1) / 2, z: (d.box.z0 + d.box.z1) / 2 });
   }
   addTracer(t) { this.tracers.push(t); this.emit({ k: 'trc', t: [r2(t.x0), r2(t.y0), r2(t.z0), r2(t.x1), r2(t.y1), r2(t.z1)], bolt: t.bolt || 0, chain: t.chain || 0, ttl: t.t }); }
   pull(t, src, force) {
@@ -483,6 +547,7 @@ class Game {
     return false;
   }
   smokeBlocks(ox, oy, oz, dx, dy, dz, l) {
+    if (l > 4) for (const b of this.M.bushes) { const t = rayBox(ox, oy, oz, dx, dy, dz, b, l); if (t > 0.8) return true; } // moitas escondem (de perto dá pra ver)
     for (const s of this.smokes) { const t = raySphere(ox, oy, oz, dx, dy, dz, s.x, s.y, s.z, s.r, l); if (t >= 0) return true; }
     for (const w of this.temp) if (w.vis) { const t = rayBox(ox, oy, oz, dx, dy, dz, w, l); if (t >= 0) return true; }
     return false;
@@ -517,18 +582,98 @@ const GRENADE_END = {
     G.emit({ k: 'boom', x: g.x, y: g.y, z: g.z, r: 4.5, kind: 'stone' });
   },
   smoke(G, g) { G.smokes.push({ x: g.x, y: 1.6, z: g.z, r: g.r || 3.7, t: g.dur || 15, T: g.dur || 15, team: g.team, col: g.col || 0 }); G.emit({ k: 'smoke', x: g.x, z: g.z }); },
+  meteor(G, g) { G.explode(g.x, Math.max(0.3, g.y), g.z, 3.6, 95, G.byId(g.owner), 'meteoro'); },
+  flare(G, g) { for (const p of G.players) if (p.alive && p.team !== g.team && Math.hypot(p.x - g.x, p.z - g.z) < 10) p.revealT = 4; G.emit({ k: 'reveal', x: g.x, z: g.z, r: 10, team: g.team }); },
+  sand(G, g) { G.zones.push({ kind: 'sand', x: g.x, z: g.z, r: 4, t: 5, T: 5, slow: 0.65, team: g.team, owner: g.owner }); G.emit({ k: 'splash', x: g.x, z: g.z }); },
+  sting(G, g) { G.zones.push({ kind: 'spores', x: g.x, z: g.z, r: 2.6, t: 4, T: 4, dps: 30, team: g.team, owner: g.owner }); G.emit({ k: 'splash', x: g.x, z: g.z }); },
+  cocoon(G, g) { G.zones.push({ kind: 'slow', x: g.x, z: g.z, r: 4, t: 5, T: 5, slow: 0.6, team: g.team, owner: g.owner }); G.emit({ k: 'splash', x: g.x, z: g.z }); },
   spores(G, g) { G.zones.push({ kind: 'spores', x: g.x, z: g.z, r: 3.4, t: 5, T: 5, dps: 28, team: g.team, owner: g.owner }); G.emit({ k: 'splash', x: g.x, z: g.z }); },
   anchor(G, g) {
     for (const p of G.players) if (p.alive && p.team !== g.team && Math.hypot(p.x - g.x, p.z - g.z) < 4) { p.stunT = Math.max(p.stunT, 1.3); G.hurt(p, 25, G.byId(g.owner), 'body', 'ancora'); }
     G.emit({ k: 'boom', x: g.x, y: g.y, z: g.z, r: 4, kind: 'stone' });
   },
 };
+function wallAhead(G, p, len, w, h, t, kind, dist = 3.2) {
+  const d = fwdVec(p.yaw, 0), cx = p.x + d[0] * dist, cz = p.z + d[2] * dist, px = -d[2], pz = d[0], n = Math.ceil(len / 1.5);
+  for (let i = 0; i < n; i++) { const o = (i - (n - 1) / 2) * 1.5, x = cx + px * o, z = cz + pz * o; G.temp.push({ x0: x - w / 2, x1: x + w / 2, y0: 0, y1: h, z0: z - w / 2, z1: z + w / 2, t, T: t, vis: true, solid: true, kind }); }
+  G.rebuild();
+  for (const q of G.players) if (q.alive) for (const b of G.temp) if (b.solid && aabbHit(b, q.x - PH.R, q.y, q.z - PH.R, q.x + PH.R, q.y + 1.8, q.z + PH.R)) { q.x -= d[0] * 1.6; q.z -= d[2] * 1.6; }
+  G.emit({ k: 'barrier', x: cx, z: cz });
+}
+function aimAlly(G, p, max) { const d = fwdVec(p.yaw, p.pitch), h = G.trace(p.x, G.eye(p), p.z, d[0], d[1], d[2], max, p); return h.p && h.p.team === p.team ? h.p : p; }
+function frontEnemies(G, p, r, cos) { const f = fwdVec(p.yaw, 0); return G.players.filter(q => { if (!q.alive || q.team === p.team) return false; const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz); return d < r && (d < 1 || (dx * f[0] + dz * f[2]) / d > cos); }); }
 function dashMove(G, p, speed, dur) {
   const I = p.in, cy = Math.cos(p.yaw), sy = Math.sin(p.yaw); let mx = I.mx, mz = I.mz; if (!mx && !mz) mz = 1;
   const l = Math.hypot(mx, mz), wx = (sy * mz + cy * mx) / l, wz = (-cy * mz + sy * mx) / l;
   p.vx = wx * speed; p.vz = wz * speed; p.dashT = dur; G.emit({ k: 'dash', id: p.id });
 }
 const ABILITY = {
+  serra: {
+    c(G, p) { p.steadyT = 5; G.emit({ k: 'buff', id: p.id }); },
+    q(G, p) { const I = p.in, m = [I.mx, I.mz]; I.mx = -I.mx || 0; I.mz = I.mz ? -I.mz : -1; dashMove(G, p, 16, 0.22); [I.mx, I.mz] = m; },
+    e(G, p) { G.throwG(p, 'flare', 20, { onLand: true }); },
+    x(G, p) { if (!p.guns[1] && !p.guns[2]) return false; p.pierceN = 3; G.emit({ k: 'buff', id: p.id }); },
+  },
+  fera: {
+    c(G, p) { for (const q of frontEnemies(G, p, 10, 0.5)) q.blindT = Math.max(q.blindT, 1.4); G.emit({ k: 'roar', x: p.x, z: p.z }); },
+    q(G, p) { const d = fwdVec(p.yaw, 0); p.vx = d[0] * 13; p.vz = d[2] * 13; p.vy = 6.5; p.onGround = false; p.dashT = 0.35; G.emit({ k: 'dash', id: p.id }); },
+    e(G, p) { let best = null, bd = 30; for (const q of G.players) if (q.alive && q.team !== p.team) { const d = Math.hypot(q.x - p.x, q.z - p.z); if (d < bd) { bd = d; best = q; } } if (!best) return false; best.revealT = 3; G.emit({ k: 'reveal', x: best.x, z: best.z, r: 3, team: p.team }); },
+    x(G, p) { p.frenzyT = 8; G.emit({ k: 'buff', id: p.id }); },
+  },
+  duna: {
+    c(G, p) { wallAhead(G, p, 9, 1.5, 3.2, 12, 'sand'); },
+    q(G, p) { G.throwG(p, 'sand', 14, { onLand: true }); },
+    e(G, p) { const [x, , z, t] = G.aimPoint(p, 38); G.grenades.push({ kind: 'smoke', owner: p.id, team: p.team, x, y: 1.6, z, vx: 0, vy: 0, vz: 0, fuse: Math.min(1, t / 40 + 0.2), grav: 0, dur: 14, col: 3 }); },
+    x(G, p) { const [x, , z] = G.aimPoint(p, 40); G.zones.push({ kind: 'vortex', x, z, r: 8, t: 5, T: 5, slow: 0.4, dps: 10, pull: true, team: p.team, owner: p.id }); G.emit({ k: 'boom', x, y: 1, z, r: 8, kind: 'sand' }); },
+  },
+  elo: {
+    c(G, p) { const t = aimAlly(G, p, 20); if (t.hp >= 100) return false; t.healT = Math.max(t.healT, 60); G.emit({ k: 'heal', id: t.id, by: p.id }); },
+    q(G, p) { let n = 0; for (const q of G.players) if (q.alive && q.team === p.team && Math.hypot(q.x - p.x, q.z - p.z) < 10) { q.hp = Math.min(100, q.hp + 35); n++; } G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 10, kind: 'heal' }); },
+    e(G, p) { const t = aimAlly(G, p, 20); if (t.armor >= 50) return false; t.armor = Math.min(100, t.armor + 30); G.emit({ k: 'shieldUp', id: t.id }); },
+    x(G, p) { for (const q of G.players) if (q.alive && q.team === p.team && Math.hypot(q.x - p.x, q.z - p.z) < 20) q.saveT = 10; G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 20, kind: 'heal' }); },
+  },
+  bisao: {
+    c(G, p) { const d = fwdVec(p.yaw, 0); p.vx = d[0] * 18; p.vz = d[2] * 18; p.dashT = 0.45; p.dashHit = { dmg: 30, stun: 1.5, stop: true, hit: new Set(), w: 'investida' }; G.emit({ k: 'dash', id: p.id }); },
+    q(G, p) { for (const q of frontEnemies(G, p, 3, 0.4)) { G.hurt(q, 40, p, 'body', 'cabecada'); q.stunT = Math.max(q.stunT, 1.8); } G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 2, kind: 'stone' }); },
+    e(G, p) { for (const q of G.players) if (q.alive && q.team !== p.team && Math.hypot(q.x - p.x, q.z - p.z) < 6) { q.slowT = Math.max(q.slowT, 3); q.slowAmt = Math.max(q.slowAmt, 0.5); } G.emit({ k: 'boom', x: p.x, y: 0.2, z: p.z, r: 6, kind: 'quake' }); },
+    x(G, p) { const d = fwdVec(p.yaw, 0); p.vx = d[0] * 24; p.vz = d[2] * 24; p.dashT = 0.75; p.dashHit = { dmg: 90, stun: 2, stop: false, hit: new Set(), w: 'manada' }; G.emit({ k: 'dash', id: p.id }); },
+  },
+  vespa: {
+    c(G, p) { G.throwG(p, 'sting', 18, { onLand: true }); },
+    q(G, p) { dashMove(G, p, 20, 0.25); },
+    e(G, p) { const [x, , z] = G.aimPoint(p, 25); G.zones.push({ kind: 'swarm', x, z, r: 3, t: 3, T: 3, dps: 18, reveal: true, team: p.team, owner: p.id }); G.emit({ k: 'splash', x, z }); },
+    x(G, p) { const [x, , z] = G.aimPoint(p, 40); G.zones.push({ kind: 'swarm', x, z, r: 7, t: 7, T: 7, dps: 30, slow: 0.3, team: p.team, owner: p.id }); G.emit({ k: 'splash', x, z, big: 1 }); },
+  },
+  cometa: {
+    c(G, p) { G.throwG(p, 'flash', 16, { fuse: 0.6, lift: 0.1 }); },
+    q(G, p) {
+      const [x, , z] = G.aimPoint(p, 14), T = 0.7;
+      p.vx = (x - p.x) / T; p.vz = (z - p.z) / T; p.vy = MOVE.grav * T / 2; p.onGround = false; p.dashT = T; p.leapStun = true; p.leapT = G.t; G.emit({ k: 'dash', id: p.id });
+    },
+    e(G, p) { G.throwG(p, 'dart', 20, { onLand: true, lift: 0.08 }); },
+    x(G, p) {
+      const [x, , z] = G.aimPoint(p, 45);
+      for (let i = 0; i < 5; i++) { const a = Math.random() * 6.28, d = i ? rnd(2, 6) : 0; G.grenades.push({ kind: 'meteor', owner: p.id, team: p.team, x: x + Math.cos(a) * d, y: 18 + i * 6, z: z + Math.sin(a) * d, vx: 0, vy: -22, vz: 0, fuse: 6, grav: 0, onHit: true }); }
+    },
+  },
+  teia: {
+    c(G, p) { const [x, , z] = G.aimPoint(p, 6); G.zones.push({ kind: 'web', x, z, r: 2.4, t: 90, T: 90, alarm: true, team: p.team, owner: p.id }); G.emit({ k: 'barrier', x, z }); },
+    q(G, p) { G.throwG(p, 'cocoon', 14, { onLand: true }); },
+    e(G, p) { const [x, , z, t] = G.aimPoint(p, 38); G.grenades.push({ kind: 'smoke', owner: p.id, team: p.team, x, y: 1.6, z, vx: 0, vy: 0, vz: 0, fuse: Math.min(1, t / 40 + 0.2), grav: 0, dur: 14, col: 4 }); },
+    x(G, p) { const [x, , z] = G.aimPoint(p, 40); G.zones.push({ kind: 'bigweb', x, z, r: 9, t: 8, T: 8, slow: 0.55, reveal: true, team: p.team, owner: p.id }); G.emit({ k: 'splash', x, z, big: 1 }); },
+  },
+  brisa: {
+    c(G, p) { for (const q of G.players) if (q.alive && q.team === p.team && Math.hypot(q.x - p.x, q.z - p.z) < 10) q.spdT = 5; G.emit({ k: 'buff', id: p.id }); },
+    q(G, p) { for (const q of frontEnemies(G, p, 9, 0.5)) { G.hurt(q, 15, p, 'body', 'rajada'); const a = Math.atan2(q.x - p.x, q.z - p.z); q.vx = Math.sin(a) * 13; q.vz = Math.cos(a) * 13; q.vy = 3; q.onGround = false; q.dashT = 0.3; } G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 4, kind: 'wind' }); },
+    e(G, p) { const t = aimAlly(G, p, 20); if (t.hp >= 100) return false; t.healT = Math.max(t.healT, 50); G.emit({ k: 'heal', id: t.id, by: p.id }); },
+    x(G, p) { G.zones.push({ kind: 'eye', x: p.x, z: p.z, r: 8, t: 8, T: 8, ward: true, team: p.team, owner: p.id }); G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 8, kind: 'wind' }); },
+  },
+  egide: {
+    c(G, p) { wallAhead(G, p, 5, 1.2, 3.6, 10, 'shield', 2.6); },
+    q(G, p) { for (const q of frontEnemies(G, p, 12, 0.55)) { q.revealT = Math.max(q.revealT, 4); q.slowT = Math.max(q.slowT, 3); q.slowAmt = Math.max(q.slowAmt, 0.4); } G.emit({ k: 'roar', x: p.x, z: p.z }); },
+    e(G, p) { for (const q of frontEnemies(G, p, 3.2, 0.4)) { q.stunT = Math.max(q.stunT, 1); const a = Math.atan2(q.x - p.x, q.z - p.z); q.vx = Math.sin(a) * 11; q.vz = Math.cos(a) * 11; q.dashT = 0.25; G.hurt(q, 20, p, 'body', 'escudo'); } G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 2, kind: 'stone' }); },
+    x(G, p) { for (const q of G.players) if (q.alive && q.team === p.team && Math.hypot(q.x - p.x, q.z - p.z) < 15) { q.armor = Math.min(100, q.armor + 50); q.wardT = 6; } G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 15, kind: 'heal' }); },
+  },
   lamina: {
     c(G, p) { dashMove(G, p, 22, 0.25); },
     q(G, p) { if (!p.onGround) return false; p.vy = 11; p.onGround = false; G.emit({ k: 'dash', id: p.id }); },
@@ -579,7 +724,7 @@ const ABILITY = {
     e(G, p) {
       const d = fwdVec(p.yaw, 0), cx = p.x + d[0] * 2.2, cz = p.z + d[2] * 2.2, px = -d[2], pz = d[0];
       for (let i = -1; i <= 1; i++) { const x = cx + px * i * 1.2, z = cz + pz * i * 1.2; G.temp.push({ x0: x - 0.6, x1: x + 0.6, y0: 0, y1: 1.35, z0: z - 0.6, z1: z + 0.6, t: 10, T: 10, vis: false, solid: true, kind: 'iron' }); }
-      G.solids = G.M.solids.concat(G.temp.filter(w => w.solid));
+      G.rebuild();
       G.emit({ k: 'barrier', x: cx, z: cz });
     },
     x(G, p) { for (const q of G.players) if (q.alive && q.team !== p.team && Math.hypot(q.x - p.x, q.z - p.z) < 15) { G.pull(q, p, 9); q.slowT = Math.max(q.slowT, 3); q.slowAmt = Math.max(q.slowAmt, 0.5); } G.emit({ k: 'boom', x: p.x, y: 0.5, z: p.z, r: 15, kind: 'quake' }); },
@@ -618,7 +763,7 @@ const ABILITY = {
     c(G, p) {
       const d = fwdVec(p.yaw, 0), cx = p.x + d[0] * 3.5, cz = p.z + d[2] * 3.5, px = -d[2], pz = d[0];
       for (let i = -2; i <= 2; i++) { const x = cx + px * i * 1.5, z = cz + pz * i * 1.5; G.temp.push({ x0: x - 0.8, x1: x + 0.8, y0: 0, y1: 3, z0: z - 0.8, z1: z + 0.8, t: 8, T: 8, vis: true, solid: true, kind: 'barrier' }); }
-      G.solids = G.M.solids.concat(G.temp.filter(w => w.solid));
+      G.rebuild();
       for (const q of G.players) if (q.alive) for (const b of G.temp) if (b.solid && aabbHit(b, q.x - PH.R, q.y, q.z - PH.R, q.x + PH.R, q.y + 1.8, q.z + PH.R)) { q.x -= d[0] * 1.6; q.z -= d[2] * 1.6; }
       G.emit({ k: 'barrier', x: cx, z: cz });
     },
@@ -748,19 +893,24 @@ function botThink(G, p, dt) {
 function botBuy(G, p) {
   const c = () => p.creds;
   const team = G.players.filter(q => q.team === p.team), avg = team.reduce((a, q) => a + q.creds, 0) / team.length;
-  const eco = avg < 2500 && G.round !== 1 && G.round !== RULES.half + 1 && !G.ot;
-  if (!eco || c() > 4200) {
+  const pistolRound = G.round === 1 || G.round === RULES.half + 1;
+  const eco = avg < 2600 && !pistolRound && !G.ot;
+  const pick = a => a[(Math.random() * a.length) | 0];
+  if (pistolRound) {
+    const r = Math.random();
+    if (r < 0.35) G.buy(p, 'leve'); else if (r < 0.6) G.buy(p, pick(['sussurro', 'enxame'])); else if (r < 0.8) G.buy(p, 'coice');
+  } else if (!eco || c() > 4200) {
     if (!p.guns[1]) {
-      if (c() >= 3900) G.buy(p, Math.random() < 0.5 ? 'rompante' : 'corisco');
-      else if (c() >= 4700 + 1000 && Math.random() < 0.2) G.buy(p, 'arauto');
-      else if (c() >= 2900) G.buy(p, Math.random() < 0.6 ? 'rompante' : 'corisco');
-      else if (c() >= 2000) G.buy(p, 'zumbido');
-      else if (c() >= 950 && Math.random() < 0.3) G.buy(p, 'gaviao');
+      if (c() >= 5700 && Math.random() < 0.15) G.buy(p, 'arauto');
+      else if (c() >= 3900) G.buy(p, pick(['rompante', 'corisco', 'rompante', 'corisco', 'gaviao', 'tormenta']));
+      else if (c() >= 2900) G.buy(p, pick(['rompante', 'corisco', 'sentinela']));
+      else if (c() >= 2250) G.buy(p, pick(['sentinela', 'mastim', 'zumbido']));
+      else if (c() >= 1600) G.buy(p, pick(['zumbido', 'trovoada', 'estrondo']));
+      else if (c() >= 1100) G.buy(p, pick(['ferroada', 'tranco']));
     }
     if (c() >= 1000 && p.armor < 50) G.buy(p, 'pesado'); else if (c() >= 400 && p.armor < 25) G.buy(p, 'leve');
-  } else if (c() >= 800 && Math.random() < 0.5 && G.round !== 1) G.buy(p, 'brado');
-  if (G.round === 1 || G.round === RULES.half + 1) { if (Math.random() < 0.5) G.buy(p, 'leve'); else if (Math.random() < 0.5) G.buy(p, 'brado'); }
-  for (const k of ['c', 'q', 'q']) if (c() >= 300 + (eco ? 0 : 0)) G.buy(p, k);
+  } else if (c() >= 800 && Math.random() < 0.5) G.buy(p, pick(['brado', 'sussurro', 'tranco']));
+  for (const k of ['c', 'q', 'q']) if (c() >= 300) G.buy(p, k);
 }
 function planBot(G, p, B) {
   const M = G.M, att = G.attTeam(), atk = p.team === att;
@@ -773,17 +923,17 @@ function planBot(G, p, B) {
     return;
   }
   if (atk) {
-    if (!G.attackSite || G.attackSiteRound !== G.round) { G.attackSite = Math.random() < 0.5 ? 'A' : 'B'; G.attackSiteRound = G.round; }
-    const site = M['site' + G.attackSite];
+    if (!G.attackSite || G.attackSiteRound !== G.round) { G.attackSite = M.siteIds[(Math.random() * M.siteIds.length) | 0]; G.attackSiteRound = G.round; }
+    const site = M.sites[G.attackSite];
     if (p.nucleo) { B.plantSpot = rndCell(site.cells); B.goal = B.plantSpot; }
     else B.goal = rndCell(site.cells);
-    B.hold = Math.PI; // olha para o lado da defesa (norte)
+    B.hold = Math.atan2((M.spawnD[0][0] + 0.5) * M.cell - p.x, -((M.spawnD[0][1] + 0.5) * M.cell - p.z)); // olha para o lado da defesa
   } else {
     // defesa: 2 no A, 2 no B, 1 no meio (pela ordem do slot)
     const k = p.slot % RULES.teamSize;
-    const spot = k < 2 ? M.siteA : k < 4 ? M.siteB : null;
-    if (spot) B.goal = rndCell(spot.cells); else B.goal = [20 * M.cell + rnd(-2, 2), 9 * M.cell + rnd(-2, 2)];
-    B.hold = 0; // olha para o sul (ataque)
+    const S = M.siteIds, spot = S.length === 3 ? M.sites[S[[0, 1, 2, 1, 0][k]]] : (k < 2 ? M.sites[S[0]] : k < 4 ? M.sites[S[1]] : null);
+    if (spot) B.goal = rndCell(spot.cells); else { const mid = []; for (let r = 0; r < M.H; r++) for (let c = 0; c < M.W; c++) if (/Meio/.test(M.callout[r][c]) && M.walk(c, r)) mid.push([c, r]); B.goal = mid.length ? rndCell(mid) : rndCell(M.sites[S[0]].cells); }
+    B.hold = Math.atan2((M.spawnT[0][0] + 0.5) * M.cell - B.goal[0], -((M.spawnT[0][1] + 0.5) * M.cell - B.goal[1])); // olha para o lado do ataque
     B.goalT = G.t + 999;
   }
 }
@@ -797,6 +947,11 @@ function botAbility(G, p, T, d) {
   if (p.hunter === 'lamina' && k !== 'e') return;
   if (p.hunter === 'sino' && k === 'e') return;
   if (p.hunter === 'ancora' && k === 'e') return;
+  if (['elo', 'brisa'].includes(p.hunter) && k !== 'q') return;
+  if (['serra', 'fera'].includes(p.hunter) && k === 'q') return;
+  if (['duna', 'egide'].includes(p.hunter) && k === 'c') return;
+  if (p.hunter === 'bisao' && k === 'c' && d > 16) return;
+  if (p.hunter === 'teia' && k === 'c') return;
   I.ab = k;
 }
 function botUlt(G, p, T) {

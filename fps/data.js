@@ -11,70 +11,8 @@ const RULES = {
   ultCost: 7, teamSize: 5,
 };
 
-// ---------------- Mapa: Ruínas de Vésper ----------------
-// cada letra = 2m. '#' parede, 'x' caixa, 'h' meia-parede, 'A'/'B' bombsite, 'T' spawn do ataque, 'D' spawn da defesa
-const MAP_FPS = {
-  nome: 'Ruínas de Vésper', cell: 2, wallH: 5.2,
-  rows: [
-    '########################################',
-    '################........################',
-    '################...DD...################',
-    '######..........DDDDDD..........########',
-    '######..........DDDDDD..........########',
-    '######..####......DD......####..########',
-    '##AAAAAAAAAA##..........##BBBBBBBBBB####',
-    '##AAAxAAAAAA##..######..##BBBBBBxBBB####',
-    '##AAAxxAAhAA.....#..#.....BBhBBxxBBB####',
-    '##AAAAAAAAAA.....#..#.....BBBBBBBBBB####',
-    '##AAAAAAxAAA##..........##BBBxBBBBBB####',
-    '##AAAAAAAAAA##...x..x...##BBBBBBBBBB####',
-    '####..####..######..######..####..######',
-    '####..####..##........##....####..######',
-    '####........##...xx...##..........######',
-    '######..######........######..##########',
-    '######..######..h..h..######..##########',
-    '######..######........######..##########',
-    '######..######...x..x.######..##########',
-    '######..........................########',
-    '######..........................########',
-    '##########..######....######..##########',
-    '##########......TTTTTTTT......##########',
-    '##########......TTTTTTTT......##########',
-    '##################TTTT##################',
-    '########################################',
-  ],
-  // nomes das regiões (aparecem no HUD e no minimapa)
-  callouts: [
-    { n: 'Site A', x0: 2, y0: 6, x1: 12, y1: 12 }, { n: 'Site B', x0: 25, y0: 6, x1: 36, y1: 12 },
-    { n: 'Meio', x0: 14, y0: 6, x1: 25, y1: 19 }, { n: 'Spawn da Defesa', x0: 6, y0: 1, x1: 32, y1: 6 },
-    { n: 'Principal A', x0: 4, y0: 12, x1: 14, y1: 19 }, { n: 'Principal B', x0: 25, y0: 12, x1: 36, y1: 19 },
-    { n: 'Pátio', x0: 6, y0: 19, x1: 32, y1: 21 }, { n: 'Spawn do Ataque', x0: 10, y0: 21, x1: 30, y1: 25 },
-  ],
-};
-
-// ---------------- Armas ----------------
-// dmg: [cabeça, corpo, pernas]; rps = tiros/s; spread em graus; mv = imprecisão andando; rec = coice (graus por tiro)
-const WEAPONS = {
-  faca:      { nome: 'Lâmina Curta', cat: 'faca', preco: 0, melee: true, rps: 2.2, dmg: [50, 50, 50], range: 2.2, slot: 3 },
-  lasca:     { nome: 'Lasca', cat: 'Pistolas', preco: 0, rps: 6.75, dmg: [78, 26, 22], mag: 12, res: 36, reload: 1.75, spread: 0.4, mv: 3.5, rec: 0.9, auto: false, slot: 2, cor: [0.35, 0.36, 0.4], len: 0.22 },
-  brado:     { nome: 'Brado', cat: 'Pistolas', preco: 800, rps: 4, dmg: [159, 55, 46], mag: 6, res: 24, reload: 2.25, spread: 0.25, mv: 4, rec: 3.2, auto: false, slot: 2, cor: [0.55, 0.45, 0.3], len: 0.28 },
-  zumbido:   { nome: 'Zumbido', cat: 'SMGs', preco: 1600, rps: 13.3, dmg: [78, 26, 22], mag: 30, res: 90, reload: 2.25, spread: 0.4, mv: 1.4, rec: 0.55, auto: true, slot: 1, cor: [0.3, 0.32, 0.36], len: 0.42 },
-  estrondo:  { nome: 'Estrondo', cat: 'Escopetas', preco: 1850, rps: 3.5, dmg: [34, 17, 14], pellets: 12, mag: 7, res: 21, reload: 2.2, spread: 6, mv: 1, rec: 4, auto: true, falloff: 10, slot: 1, cor: [0.42, 0.3, 0.22], len: 0.5 },
-  gaviao:    { nome: 'Gavião', cat: 'Snipers', preco: 950, rps: 1.5, dmg: [202, 101, 85], mag: 5, res: 10, reload: 2.5, spread: 0.1, mv: 5, unscoped: 4, rec: 4, auto: false, zoom: 2.5, slot: 1, cor: [0.35, 0.4, 0.3], len: 0.7 },
-  corisco:   { nome: 'Corisco', cat: 'Rifles', preco: 2900, rps: 11, dmg: [140, 35, 30], mag: 30, res: 60, reload: 2.5, spread: 0.2, mv: 4, rec: 0.6, auto: true, slot: 1, cor: [0.25, 0.27, 0.32], len: 0.62 },
-  rompante:  { nome: 'Rompante', cat: 'Rifles', preco: 2900, rps: 9.75, dmg: [160, 40, 34], mag: 25, res: 50, reload: 2.5, spread: 0.25, mv: 4, rec: 0.75, auto: true, slot: 1, cor: [0.3, 0.22, 0.18], len: 0.64 },
-  tormenta:  { nome: 'Tormenta', cat: 'Pesadas', preco: 3200, rps: 12, dmg: [95, 38, 32], mag: 100, res: 200, reload: 5, spread: 0.8, mv: 3, rec: 0.35, auto: true, slot: 1, cor: [0.3, 0.3, 0.26], len: 0.7 },
-  arauto:    { nome: 'Arauto', cat: 'Snipers', preco: 4700, rps: 0.75, dmg: [255, 150, 127], mag: 5, res: 10, reload: 3.7, spread: 0.05, mv: 6, unscoped: 6, rec: 6, auto: false, zoom: 5, slot: 1, cor: [0.18, 0.22, 0.3], len: 0.85 },
-};
-const SHOP = [
-  { cat: 'Pistolas', itens: ['lasca', 'brado'] },
-  { cat: 'SMGs', itens: ['zumbido'] },
-  { cat: 'Escopetas', itens: ['estrondo'] },
-  { cat: 'Rifles', itens: ['corisco', 'rompante'] },
-  { cat: 'Snipers', itens: ['gaviao', 'arauto'] },
-  { cat: 'Pesadas', itens: ['tormenta'] },
-];
-const SHIELDS = { leve: { nome: 'Escudo Leve', preco: 400, val: 25 }, pesado: { nome: 'Escudo Pesado', preco: 1000, val: 50 } };
+// mapas: ver fps/maps.js
+// armas: ver fps/weapons.js
 
 // ---------------- Caçadores (versão FPS) ----------------
 // c e q: compradas (preço por carga, máx. cargas). e: assinatura grátis (cargas por round). x: ultimate (pontos)
@@ -142,5 +80,67 @@ Object.assign(FPS_HUNTERS, {
     x: { nome: 'Maré Baixa', desc: 'Puxa e deixa lentos todos os inimigos num raio enorme.' },
   },
 });
+Object.assign(FPS_HUNTERS, {
+  serra: {
+    c: { nome: 'Mira Firme', preco: 200, max: 1, desc: 'Por 5s sua arma fica sem imprecisão e com metade do coice.' },
+    q: { nome: 'Recuo Tático', preco: 150, max: 2, desc: 'Salta rápido para trás.' },
+    e: { nome: 'Sinalizador', free: 1, desc: 'Arremessa um sinalizador que revela inimigos perto dele por 4s.' },
+    x: { nome: 'Bala Perfurante', desc: 'Os próximos 3 tiros atravessam paredes e causam mais dano.' },
+  },
+  fera: {
+    c: { nome: 'Rugido', preco: 250, max: 1, desc: 'Ruge à frente: inimigos perto ficam atordoados de susto (quase cegos).' },
+    q: { nome: 'Bote', preco: 200, max: 1, desc: 'Pula longe para frente.' },
+    e: { nome: 'Faro', free: 1, desc: 'Revela o inimigo mais perto (até 30m) por 3s.' },
+    x: { nome: 'Frenesi', desc: 'Por 8s: mais rápida, atira mais rápido e cada abate cura 50.' },
+  },
+  duna: {
+    c: { nome: 'Muralha de Areia', preco: 300, max: 1, desc: 'Ergue uma muralha larga e sólida na frente (12s).' },
+    q: { nome: 'Areia Movediça', preco: 200, max: 2, desc: 'Arremessa areia que deixa os inimigos muito lentos.' },
+    e: { nome: 'Tempestade de Areia', free: 2, desc: 'Cortina de areia onde você mira (14s). Bloqueia a visão.' },
+    x: { nome: 'Redemoinho', desc: 'Redemoinho na mira: puxa os inimigos para o centro e deixa lentos.' },
+  },
+  elo: {
+    c: { nome: 'Fio Curador', preco: 200, max: 1, desc: 'Cura 60 de vida no aliado que você mira (ou em você).' },
+    q: { nome: 'Pulso Restaurador', preco: 250, max: 1, desc: 'Cura 35 de vida em todos os aliados perto.' },
+    e: { nome: 'Escudo de Éter', free: 1, desc: 'Dá 30 de escudo ao aliado que você mira (ou a você).' },
+    x: { nome: 'Renascer', desc: 'Por 10s, aliados perto não morrem: ao cair, voltam com 40 de vida (uma vez).' },
+  },
+  bisao: {
+    c: { nome: 'Investida', preco: 250, max: 1, desc: 'Corre com tudo para frente e atordoa o primeiro inimigo que atropelar.' },
+    q: { nome: 'Cabeçada', preco: 150, max: 1, desc: 'Cabeçada curta: dano e atordoa quem estiver na sua frente.' },
+    e: { nome: 'Pisotear', free: 1, desc: 'Pisa forte: inimigos perto ficam lentos por 3s.' },
+    x: { nome: 'Estouro da Manada', desc: 'Uma investida enorme que atropela e atordoa todos no caminho.' },
+  },
+  vespa: {
+    c: { nome: 'Ferrão Venenoso', preco: 200, max: 2, desc: 'Arremessa um ferrão que envenena a área onde cai.' },
+    q: { nome: 'Voo Rasante', preco: 150, max: 1, desc: 'Avança voando para frente.' },
+    e: { nome: 'Enxame', free: 1, desc: 'Solta um enxame na mira: dano leve e revela quem estiver dentro.' },
+    x: { nome: 'Ninho', desc: 'Um ninho enorme na mira: veneno forte e lentidão por 7s.' },
+  },
+  cometa: {
+    c: { nome: 'Estilhaço Estelar', preco: 250, max: 2, desc: 'Clarão de estrela que cega quem estiver olhando.' },
+    q: { nome: 'Queda de Cometa', preco: 250, max: 1, desc: 'Salta até o ponto mirado e atordoa quem estiver perto da queda.' },
+    e: { nome: 'Órbita', free: 1, desc: 'Lança uma estrela que revela inimigos perto de onde cai.' },
+    x: { nome: 'Chuva de Meteoros', desc: 'Cinco meteoros caem em volta do ponto mirado.' },
+  },
+  teia: {
+    c: { nome: 'Armadilha', preco: 200, max: 2, desc: 'Fio escondido no chão: quem passa fica preso, lento e revelado.' },
+    q: { nome: 'Casulo', preco: 250, max: 1, desc: 'Arremessa uma bola de teia que deixa a área lenta.' },
+    e: { nome: 'Véu', free: 2, desc: 'Cortina roxa onde você mira (14s). Bloqueia a visão.' },
+    x: { nome: 'Grande Teia', desc: 'Teia gigante na mira: deixa lento e revela todos dentro por 8s.' },
+  },
+  brisa: {
+    c: { nome: 'Corrente de Ar', preco: 200, max: 1, desc: 'Você e aliados perto ficam mais rápidos por 5s.' },
+    q: { nome: 'Rajada Repulsora', preco: 250, max: 1, desc: 'Empurra para longe os inimigos à sua frente.' },
+    e: { nome: 'Sopro Curador', free: 1, desc: 'Cura 50 no aliado que você mira (ou em você).' },
+    x: { nome: 'Olho do Furacão', desc: 'Área calma em volta de você: aliados dentro se curam e levam menos dano.' },
+  },
+  egide: {
+    c: { nome: 'Escudo Erguido', preco: 300, max: 1, desc: 'Ergue um escudo alto e sólido à frente (10s).' },
+    q: { nome: 'Provocar', preco: 200, max: 1, desc: 'Inimigos à frente ficam revelados e lentos.' },
+    e: { nome: 'Golpe de Escudo', free: 1, desc: 'Empurra e atordoa quem estiver colado na sua frente.' },
+    x: { nome: 'Égide Ancestral', desc: 'Aliados perto ganham 50 de escudo e levam menos dano por 6s.' },
+  },
+});
 const FPS_HUNTER_IDS = Object.keys(FPS_HUNTERS);
-const FPS_ULT = { brasa: 7, corvo: 6, mare: 7, lumi: 8, rocha: 7, lamina: 7, trovao: 7, vinha: 7, sino: 7, ancora: 7 };
+const FPS_ULT = { brasa: 7, corvo: 6, mare: 7, lumi: 8, rocha: 7, lamina: 7, trovao: 7, vinha: 7, sino: 7, ancora: 7, serra: 7, fera: 7, duna: 7, elo: 8, bisao: 7, vespa: 7, cometa: 7, teia: 7, brisa: 7, egide: 7 };

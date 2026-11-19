@@ -5,7 +5,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TEAM_NAME = ['Alvorada', 'Crepúsculo'], TEAM_COL = ['#3fa9ff', '#ff5a4a'];
 const BOT_NAMES_F = ['Eco', 'Vulto', 'Faísca', 'Garoa', 'Breu', 'Ônix', 'Sina', 'Musgo', 'Rajada', 'Cinza', 'Neblina', 'Trovo'];
-const FPSET_DEF = { sens: 0.35, fov: 103, scale: 1, xcol: '#5dff9a', vol: 70 };
+const FPSET_DEF = { sens: 0.35, fov: 103, scale: 1, xcol: '#5dff9a', vol: 70, shadows: 1 };
 let FS = Object.assign({}, FPSET_DEF); try { Object.assign(FS, JSON.parse(localStorage.getItem('ruptura-fps') || '{}')); } catch (e) { }
 const saveFS = () => { try { localStorage.setItem('ruptura-fps', JSON.stringify(FS)); } catch (e) { } };
 
@@ -33,8 +33,8 @@ const AU = {
 // ---------------- início ----------------
 let gl;
 try { gl = App.gl = new GL($('#cv')); } catch (e) { $('#gate').innerHTML = `<h2>Não deu para abrir o modo FPS</h2><p>${esc(e.message)}</p><a class="btn" href="index.html">Voltar</a>`; throw e; }
-App.M = buildWorld(MAP_FPS);
-App.mapMesh = gl.mesh(boxGeo(App.M.renderBoxes));
+App.mapSel = 'random'; try { App.mapSel = localStorage.getItem('ruptura-fps-map') || 'random'; } catch (e) { }
+loadMap(FPS_MAP_IDS.includes(App.mapSel) ? App.mapSel : 'vesper'); gl.shadows = !!FS.shadows;
 
 function buildMenu() {
   const box = $('#pick'); box.innerHTML = '';
@@ -47,6 +47,24 @@ function buildMenu() {
     d.onclick = () => { App.hunter = h; try { localStorage.setItem('ruptura-fps-h', h); } catch (e) { } buildMenu(); };
     box.appendChild(d);
   }
+}
+const _mapPrev = {};
+function mapPreview(id) {
+  if (_mapPrev[id]) return _mapPrev[id];
+  const R = FPS_MAPS[id].rows, s = 4, c = document.createElement('canvas'); c.width = R[0].length * s; c.height = R.length * s;
+  const g = c.getContext('2d'), col = { '#': null, 'o': '#05070d', 'A': '#b07a48', 'B': '#4c7eaa', 'C': '#5aa05a', 'x': '#6a5038', 'h': '#777', 'T': '#8a6d6a', 'D': '#6a7c8e', 'w': '#2c6a80', 'i': '#d8eefa', 'g': '#3a6a2a', 'b': '#a0703a', '=': '#e0a030', 'L': '#ffd060', 'P': '#a070ff', 'Q': '#50e0ff' };
+  g.fillStyle = '#1a1d28'; g.fillRect(0, 0, c.width, c.height);
+  R.forEach((row, r) => [...row].forEach((ch, k) => { const f = ch in col ? col[ch] : '#a8a294'; if (f) { g.fillStyle = f; g.fillRect(k * s, r * s, s, s); } }));
+  return (_mapPrev[id] = c.toDataURL());
+}
+function mapCards(clickable) {
+  const sel = App.mapSel;
+  return `<div class="mcard${sel === 'random' ? ' sel' : ''}" ${clickable ? 'data-map="random"' : ''}><div class="mprev rnd">?</div><b>Aleatório</b><small>Sorteia um dos 7 mapas</small></div>` +
+    FPS_MAP_IDS.map(id => { const m = FPS_MAPS[id]; return `<div class="mcard${sel === id ? ' sel' : ''}" ${clickable ? `data-map="${id}"` : ''} title="${esc(m.mec)}"><img class="mprev" src="${mapPreview(id)}" alt=""><b>${m.nome}</b><em>${m.tag}</em><small>${m.mec}</small></div>`; }).join('');
+}
+function buildMaps() {
+  $('#mpick').innerHTML = mapCards(true);
+  $('#mpick').querySelectorAll('[data-map]').forEach(d => d.onclick = () => { App.mapSel = d.dataset.map; try { localStorage.setItem('ruptura-fps-map', App.mapSel); } catch (e) { } buildMaps(); if (App.mapSel !== 'random') loadMap(App.mapSel); });
 }
 function hunterPortraitFPS(h) {
   const c = document.createElement('canvas'); c.width = c.height = 90; const g = c.getContext('2d');
@@ -69,9 +87,11 @@ function botSlots(slots) {
     used.push(h); return { kind: 'bot', name: names.pop() + ' [bot]', hunter: h };
   });
 }
-function startMatch(slotsIn) {
+const pickMap = sel => FPS_MAP_IDS.includes(sel) ? sel : FPS_MAP_IDS[(Math.random() * FPS_MAP_IDS.length) | 0];
+function startMatch(slotsIn, mapId) {
   AU.init();
   let slots = slotsIn;
+  loadMap(mapId || pickMap(App.mapSel));
   if (!slots) { App.role = 'solo'; const S = Array.from({ length: RULES.teamSize * 2 }, () => ({ kind: 'empty' })); S[0] = { kind: 'human', pid: 'me', name: myName(), hunter: App.hunter }; slots = botSlots(S); App.myPid = 'me'; }
   App.slots = slots;
   App.G = new Game(App.M, slots.map((s, i) => ({ id: i + 1, pid: s.pid, name: s.name, bot: s.kind === 'bot', hunter: s.hunter })));
@@ -152,13 +172,13 @@ function moveSlot(pid, i) {
   const j = App.slots.findIndex(x => x.pid === pid); if (j < 0) return;
   App.slots[i] = App.slots[j]; App.slots[j] = { kind: 'empty' }; syncRoom();
 }
-function syncRoom() { if (App.role === 'host' && App.tr) App.tr.broadcast({ t: 'room', slots: App.slots }); renderRoom(); }
+function syncRoom() { if (App.role === 'host' && App.tr) App.tr.broadcast({ t: 'room', slots: App.slots, map: App.mapSel }); renderRoom(); }
 function clientMsg(m) {
   switch (m.t) {
     case 'welcome': App.myPid = m.pid; renderRoom(); break;
-    case 'room': App.slots = m.slots; renderRoom(); break;
+    case 'room': App.slots = m.slots; App.mapSel = m.map || 'random'; renderRoom(); break;
     case 'full': leaveRoom(); $('#acctmsg').textContent = m.why; break;
-    case 'start': startMatch(m.slots); break;
+    case 'start': startMatch(m.slots, m.map); break;
     case 's': if (App.G) App.snaps.push(m); break;
     case 'back': App.running = false; App.G = null; $('#hud').style.display = 'none'; $('#end').classList.remove('show'); document.exitPointerLock?.(); openRoom(); break;
   }
@@ -166,9 +186,9 @@ function clientMsg(m) {
 function clientClose() { const inGame = !!App.G; leaveRoom(); $('#acctmsg').textContent = inGame ? 'O dono da sala saiu. A partida acabou.' : 'Conexão com a sala perdida.'; }
 function hostStart() {
   if (App.role !== 'host' || App.G) return;
-  const S = botSlots(App.slots);
-  App.tr.broadcast({ t: 'start', slots: S });
-  startMatch(S);
+  const S = botSlots(App.slots), map = pickMap(App.mapSel);
+  App.tr.broadcast({ t: 'start', slots: S, map });
+  startMatch(S, map);
 }
 function backToRoom() { // depois da partida, o dono leva todos de volta para a sala
   App.running = false; App.G = null; $('#hud').style.display = 'none'; $('#end').classList.remove('show');
@@ -192,6 +212,8 @@ function renderRoom() {
     }).join('');
     el.querySelectorAll('.rs.empty').forEach(d => d.onclick = () => { if (App.role === 'host') moveSlot('host', +d.dataset.i); else App.tr.send({ t: 'move', i: +d.dataset.i }); });
   }
+  $('#rmap').innerHTML = mapCards(App.role === 'host');
+  if (App.role === 'host') $('#rmap').querySelectorAll('[data-map]').forEach(d => d.onclick = () => { App.mapSel = d.dataset.map; try { localStorage.setItem('ruptura-fps-map', App.mapSel); } catch (e) { } syncRoom(); });
   $('#rpick').innerHTML = FPS_HUNTER_IDS.map(h => `<button class="rh${App.hunter === h ? ' on' : ''}" data-h="${h}" style="--c:${CLASSES[HUNTERS[h].classe].cor}">${HUNTERS[h].nome}<small>${CLASSES[HUNTERS[h].classe].nome}</small></button>`).join('');
   $('#rpick').querySelectorAll('.rh').forEach(b => b.onclick = () => {
     App.hunter = b.dataset.h; try { localStorage.setItem('ruptura-fps-h', App.hunter); } catch (e) { }
@@ -199,6 +221,8 @@ function renderRoom() {
     else { App.tr.send({ t: 'hunter', h: App.hunter }); renderRoom(); }
   });
 }
+// mantém a conexão viva enquanto espera na sala
+setInterval(() => { if (App.role === 'client' && App.tr && !App.running) try { App.tr.send({ t: 'ka' }); } catch (e) { } }, 2000);
 $('#btn-host').onclick = () => hostRoom();
 $('#btn-join').onclick = () => joinRoom($('#in-code').value);
 $('#in-code').onkeydown = e => { if (e.key === 'Enter') joinRoom($('#in-code').value); };
@@ -343,21 +367,23 @@ function toggleBuy(force) {
   $('#buy').classList.toggle('show', App.buyOpen);
   if (App.buyOpen) { document.exitPointerLock?.(); renderBuy(); } else if (App.running) lockPointer();
 }
+const _icons = {};
+function iconURL(id) { return _icons[id] || (_icons[id] = weaponIcon(id).toDataURL()); }
 function renderBuy() {
   const me = App.me, G = App.G; if (!me) return;
   const F = FPS_HUNTERS[me.hunter];
-  let h = `<div class="buy-top"><b>Loja</b><span class="cr">◈ ${me.creds}</span><span class="bt">${Math.max(0, Math.ceil(G.phaseT))}s de compra · B fecha</span></div><div class="buy-grid">`;
+  let h = `<div class="buy-top"><b>Arsenal</b><span class="cr">◈ ${me.creds}</span><span class="bt">${Math.max(0, Math.ceil(G.phaseT))}s de compra · B fecha</span></div><div class="buy-grid">`;
   for (const cat of SHOP) {
     h += `<div class="bcol"><h4>${cat.cat}</h4>`;
     for (const id of cat.itens) {
       const W = WEAPONS[id], own = me.guns[W.slot] && me.guns[W.slot].id === id;
-      h += `<button class="bitem${own ? ' own' : ''}" ${me.creds < W.preco && !own ? 'disabled' : ''} data-buy="${id}"><span>${W.nome}</span><em>${W.preco ? '◈ ' + W.preco : 'grátis'}</em></button>`;
+      h += `<button class="bitem wpn${own ? ' own' : ''}" ${me.creds < W.preco && !own ? 'disabled' : ''} data-buy="${id}" title="${esc(W.desc || '')}"><img src="${iconURL(id)}" alt=""><span>${W.nome}</span><em>${W.preco ? '◈ ' + W.preco : 'grátis'}</em></button>`;
     }
     h += '</div>';
   }
-  h += `<div class="bcol"><h4>Escudos</h4>${Object.entries(SHIELDS).map(([id, S]) => `<button class="bitem${me.armor >= S.val ? ' own' : ''}" ${me.creds < S.preco || me.armor >= S.val ? 'disabled' : ''} data-buy="${id}"><span>${S.nome}</span><em>◈ ${S.preco}</em></button>`).join('')}
-    <h4>Habilidades</h4>${['c', 'q'].map(k => `<button class="bitem" ${me.creds < F[k].preco || me.ab[k] >= F[k].max ? 'disabled' : ''} data-buy="${k}"><span>${k.toUpperCase()} · ${F[k].nome} <small>${me.ab[k]}/${F[k].max}</small></span><em>◈ ${F[k].preco}</em></button>`).join('')}
-    <div class="bnote">E · ${F.e.nome}: grátis (${F.e.free} por round)<br>X · ${F.x.nome}: ${FPS_ULT[me.hunter]} pontos (abates, mortes, plantar/desarmar)</div></div>`;
+  h += `<div class="bcol"><h4>Escudos</h4>${Object.entries(SHIELDS).map(([id, S]) => `<button class="bitem${me.armor >= S.val ? ' own' : ''}" ${me.creds < S.preco || me.armor >= S.val ? 'disabled' : ''} data-buy="${id}"><span>${S.nome} <small>+${S.val}</small></span><em>◈ ${S.preco}</em></button>`).join('')}
+    <h4>Habilidades</h4>${['c', 'q'].map(k => `<button class="bitem" ${me.creds < F[k].preco || me.ab[k] >= F[k].max ? 'disabled' : ''} data-buy="${k}" title="${esc(F[k].desc)}"><span>${k.toUpperCase()} · ${F[k].nome} <small>${me.ab[k]}/${F[k].max}</small></span><em>◈ ${F[k].preco}</em></button>`).join('')}
+    <div class="bnote">E · ${F.e.nome}: grátis (${F.e.free} por round)<br>X · ${F.x.nome}: ${FPS_ULT[me.hunter]} pontos</div></div>`;
   h += '</div>';
   $('#buy').innerHTML = h;
   $('#buy').querySelectorAll('[data-buy]').forEach(b => b.onclick = () => { sendEv({ buy: b.dataset.buy }); AU.tone(800, 1200, 0.08, 0.15, 'triangle'); setTimeout(renderBuy, App.role === 'client' ? 150 : 40); });
@@ -453,111 +479,6 @@ function boardHTML() {
 }
 function renderBoard() { $('#board').innerHTML = boardHTML(); }
 
-// ---------------- desenho do mundo ----------------
-function drawPlayer(p, T) {
-  const C = HUNTERS[p.hunter].cores, col = k => hex3(C[k]);
-  const h = App.G.height(p), ry = -p.yaw, cy = Math.cos(ry), sy = Math.sin(ry);
-  const L = (lx, ly, lz) => [p.x + cy * lx + sy * lz, p.y + ly, p.z - sy * lx + cy * lz];
-  const part = (lx, ly, lz, sx, sy_, sz, c, rx = 0) => { const [x, y, z] = L(lx, ly, lz); gl.box(x, y, z, sx, sy_, sz, c, { ry, rx }); };
-  const mv = Math.hypot(p.vx, p.vz), sw = mv > 1 ? Math.sin(T * 11) * 0.5 : 0, k = h / PH.H;
-  part(-0.12, 0.42 * k, 0, 0.18, 0.84 * k, 0.2, col('roupa2'), sw);
-  part(0.12, 0.42 * k, 0, 0.18, 0.84 * k, 0.2, col('roupa2'), -sw);
-  part(0, 0.84 * k + 0.33, 0, 0.5, 0.66, 0.3, col('roupa'));
-  part(0, 0.84 * k + 0.35, -0.16, 0.5, 0.08, 0.02, col('detalhe'));
-  part(0, h - 0.17, 0, 0.3, 0.32, 0.3, col('pele'));
-  part(0, h - 0.04, 0.02, 0.33, 0.12, 0.33, col('cabelo'));
-  part(0.06, h - 0.16, -0.155, 0.16, 0.05, 0.02, [0.1, 0.1, 0.12]);
-  // braços e arma apontando para a mira
-  const W = App.G.curW(p), len = W && W.len || 0.25, ap = -p.pitch;
-  part(0.3, 0.84 * k + 0.4, -0.18, 0.13, 0.13, 0.42, col('roupa'), ap);
-  part(-0.22, 0.84 * k + 0.4, -0.22, 0.13, 0.13, 0.36, col('roupa'), ap);
-  part(0.12, 0.84 * k + 0.45, -0.45 - len / 2, 0.09, 0.12, len, W && W.cor || [0.7, 0.7, 0.75], ap);
-  if (p.nucleo) part(0, 0.84 * k + 0.4, 0.22, 0.3, 0.35, 0.16, [0.4, 0.95, 1]);
-}
-function drawWorld(T, dt) {
-  const G = App.G, me = App.me;
-  gl.draw(App.mapMesh);
-  // jogadores (inimigos só se visíveis)
-  App.vis = new Set();
-  for (const p of G.players) {
-    if (p === me && me.alive) continue;
-    if (!p.alive) { if (p.body) { gl.box(p.body.x, 0.12, p.body.z, 0.55, 0.24, 1.6, hex3(HUNTERS[p.hunter].cores.roupa), { ry: -p.body.yaw }); } continue; }
-    const ally = p.team === me.team;
-    if (!ally && !(G.canSee(me.alive ? me : (App.spec || me), p) || p.revealT > 0 || G.revealTeam[me.team] > 0)) continue;
-    App.vis.add(p.id);
-    drawPlayer(p, T);
-  }
-  // Núcleo
-  if (G.nucleo) {
-    const n = G.nucleo, pl = n.planted, pulse = pl ? (Math.sin(T * (6 + (RULES.nucleoTime - G.phaseT) * 0.4)) * 0.5 + 0.5) : 0.4;
-    gl.box(n.x, 0.25, n.z, 0.5, 0.5, 0.5, [0.2, 0.3, 0.4], { ry: T });
-    gl.box(n.x, 0.62, n.z, 0.28, 0.3, 0.28, [0.4, 0.95, 1], { emis: 0.6 + pulse * 0.4, ry: -T * 2 });
-  }
-  // armas no chão
-  for (const d of G.drops) gl.box(d.x, 0.08, d.z, 0.12, 0.1, WEAPONS[d.g.id].len + 0.2, WEAPONS[d.g.id].cor, { ry: d.t * 3 });
-  // granadas
-  for (const g of G.grenades) gl.box(g.x, g.y, g.z, 0.18, 0.18, 0.18, g.kind === 'rocket' ? [1, 0.5, 0.2] : g.kind === 'flash' ? [1, 1, 0.9] : [0.4, 0.4, 0.45], { emis: g.kind === 'rocket' || g.kind === 'flash' ? 1 : 0, ry: T * 8 });
-  // barreiras sólidas
-  for (const w of G.temp) if (w.solid) gl.box((w.x0 + w.x1) / 2, (w.y0 + w.y1) / 2, (w.z0 + w.z1) / 2, w.x1 - w.x0, w.y1 - w.y0, w.z1 - w.z0, w.kind === 'iron' ? [0.45, 0.48, 0.52] : [1, 0.88, 0.5], { emis: w.kind === 'iron' ? 0 : 0.35, mat: w.kind === 'iron' ? 4 : undefined });
-  // efeitos transparentes
-  gl.blend(true);
-  for (const z of G.zones) {
-    if (z.kind === 'alarm' && z.team !== me.team) continue; // o sino vigia fica escondido do inimigo
-    const c = { fire: [1, 0.45, 0.1], flood: [0.2, 0.5, 0.9], slow: [1, 0.9, 0.4], storm: [0.6, 0.4, 1], roots: [0.3, 0.7, 0.2], spores: [0.6, 0.9, 0.2], alarm: [1, 0.85, 0.3] }[z.kind] || [0.2, 0.6, 1];
-    if (z.kind === 'alarm') { gl.box(z.x, 0.25, z.z, 0.35, 0.5, 0.35, [1, 0.85, 0.3], { emis: 0.6 }); continue; }
-    if (z.kind === 'storm' && Math.random() < 0.3) App.parts.push({ x: z.x + rnd(-z.r, z.r) * 0.7, y: rnd(0.5, 4), z: z.z + rnd(-z.r, z.r) * 0.7, vx: 0, vy: -6, vz: 0, t: 0.4, T: 0.4, col: [0.8, 0.7, 1], s: 0.08, glow: 1 });
-    gl.box(z.x, 0.04, z.z, z.r * 2, 0.06, z.r * 2, c, { a: 0.45, emis: 0.6 });
-    if (z.kind === 'fire' && Math.random() < 0.6) App.parts.push({ x: z.x + rnd(-z.r, z.r) * 0.7, y: 0.1, z: z.z + rnd(-z.r, z.r) * 0.7, vx: 0, vy: rnd(1, 3), vz: 0, t: 0.6, T: 0.6, col: [1, 0.6, 0.15], s: 0.15, glow: 1 });
-  }
-  for (const w of G.temp) if (!w.solid) gl.box((w.x0 + w.x1) / 2, (w.y0 + w.y1) / 2, (w.z0 + w.z1) / 2, w.x1 - w.x0, w.y1 - w.y0, w.z1 - w.z0, [0.25, 0.55, 0.85], { a: 0.75, emis: 0.3 });
-  for (const s of G.smokes) {
-    const f = Math.min(1, (s.T - s.t) / 0.6, s.t / 0.8);
-    for (let i = 0; i < 3; i++) gl.ball(s.x + Math.sin(T * 0.3 + i * 2) * 0.3, s.y - i * 0.2, s.z + Math.cos(T * 0.3 + i * 2) * 0.3, s.r * 2 * f * (1 - i * 0.1), s.r * 1.8 * f * (1 - i * 0.1), s.r * 2 * f * (1 - i * 0.1), s.col === 2 ? [0.35, 0.6, 0.3] : s.col === 1 ? [0.85, 0.9, 0.95] : [0.72, 0.8, 0.9], { a: 0.6 + i * 0.15, ry: i * 0.5 + T * 0.1 });
-  }
-  gl.blend(false);
-  // traçantes e partículas (aditivo)
-  gl.additive(true);
-  for (const t of G.tracers) {
-    const dx = t.x1 - t.x0, dy = t.y1 - t.y0, dz = t.z1 - t.z0, l = Math.hypot(dx, dy, dz);
-    if (l < 0.5) continue;
-    const tw = t.bolt ? 0.09 : t.chain ? 0.06 : 0.025;
-    gl.boxM(M4.trs((t.x0 + t.x1) / 2, (t.y0 + t.y1) / 2, (t.z0 + t.z1) / 2, Math.atan2(dx, dz), -Math.asin(dy / l), 0, tw, tw, l), t.bolt ? [0.7, 0.6, 1] : t.chain ? [0.6, 0.65, 0.7] : [1, 0.85, 0.5], { emis: 1, a: 0.8 });
-  }
-  for (const q of App.parts) { q.t -= dt; q.x += q.vx * dt; q.y += q.vy * dt; q.z += q.vz * dt; q.vy -= (q.glow ? -1 : 9) * dt; if (q.y < 0) { q.y = 0; q.vy *= -0.3; } gl.box(q.x, q.y, q.z, q.s, q.s, q.s, q.col, { emis: 1, a: Math.max(0, q.t / q.T) }); }
-  App.parts = App.parts.filter(q => q.t > 0);
-  gl.additive(false);
-}
-function drawViewmodel(T, dt) {
-  const me = App.me, G = App.G; if (!me.alive) return;
-  const W = G.curW(me); if (W && W.zoom && me.zoom) return;
-  gl.viewmodel(70 * Math.PI / 180);
-  const mv = Math.hypot(me.vx, me.vz) / MOVE.run;
-  App.bobT += dt * mv * 9;
-  App.kick = Math.max(0, App.kick - dt * 12);
-  const bx = Math.sin(App.bobT) * 0.012 * mv, by = -Math.abs(Math.cos(App.bobT)) * 0.012 * mv;
-  const sw = me.switchT > 0 ? me.switchT * 0.5 : 0, rl = me.reloadT > 0 ? Math.sin(Math.min(1, me.reloadT / WEAPONS[me.guns[me.cur]?.id || 'lasca'].reload) * Math.PI) * 0.12 : 0;
-  const ox = 0.15 + bx, oy = -0.15 + by - sw - rl, oz = -0.36 + App.kick * 0.04;
-  const C = HUNTERS[me.hunter].cores;
-  if (me.cur === 3) {
-    gl.box(ox, oy + 0.03, oz - 0.05, 0.03, 0.03, 0.2, [0.2, 0.2, 0.22]);
-    gl.box(ox, oy + 0.04, oz - 0.24, 0.015, 0.05, 0.22, [0.85, 0.88, 0.92], { emis: 0.2 });
-    gl.box(ox + 0.02, oy - 0.03, oz + 0.05, 0.08, 0.08, 0.2, hex3(C.pele));
-    return;
-  }
-  const L = W.len * 0.75, c = W.cor, rx = App.kick * 0.15, K = 0.7;
-  const g = (x, y, z, sx, sy, sz, col, o = {}) => gl.box(ox + x * K, oy + y * K, oz + z, sx * K, sy * K, sz, col, Object.assign({ rx }, o));
-  g(0, 0, -L / 2, 0.06, 0.08, L, c);
-  g(0, 0.05, -L * 0.4, 0.04, 0.03, L * 0.6, c.map(v => v * 0.7));
-  g(0, -0.08, -0.02, 0.05, 0.12, 0.06, [0.12, 0.12, 0.14]);
-  if (W.mag > 7 && W.cat !== 'Pistolas') g(0, -0.08, -L * 0.45, 0.045, 0.14, 0.07, [0.15, 0.15, 0.17]);
-  if (W.zoom) g(0, 0.075, -L * 0.45, 0.05, 0.05, 0.2, [0.1, 0.1, 0.12]);
-  g(0, 0.02, -L - 0.02, 0.03, 0.03, 0.04, [0.05, 0.05, 0.05]);
-  g(-0.02, -0.07, 0.06, 0.08, 0.08, 0.16, hex3(C.pele));
-  g(-0.05, -0.04, -L * 0.6, 0.07, 0.06, 0.12, hex3(C.pele));
-  g(0.02, -0.09, 0.2, 0.11, 0.11, 0.2, hex3(C.roupa));
-  if (App.flash > 0) { App.flash -= dt; gl.additive(true); g(0, 0.02, -L - 0.12, 0.12, 0.12, 0.12, [1, 0.8, 0.4], { emis: 1, a: 0.9, ry: Math.random() }); gl.additive(false); }
-}
-
 // ---------------- HUD ----------------
 const hud = $('#hud2d'), hx = hud.getContext('2d');
 function drawHud(dt) {
@@ -602,15 +523,15 @@ function drawHud(dt) {
   minimap();
 }
 function minimap() {
-  const G = App.G, me = App.me, M = G.M, s = 5, ox = 14, oy = 14, w = M.W * s, h = M.H * s;
+  const G = App.G, me = App.me, M = G.M, s = Math.min(5, 230 / M.W), ox = 14, oy = 14, w = M.W * s, h = M.H * s;
   hx.save(); hx.globalAlpha = 0.9; hx.fillStyle = 'rgba(10,12,20,.75)'; hx.fillRect(ox - 4, oy - 4, w + 8, h + 8);
   for (let r = 0; r < M.H; r++) for (let c = 0; c < M.W; c++) {
     const ch = M.at(c, r); if (ch === '#') continue;
-    hx.fillStyle = ch === 'A' ? '#8a6040' : ch === 'B' ? '#406080' : ch === 'x' || ch === 'h' ? '#555' : '#9a968c';
+    hx.fillStyle = { A: '#8a6040', B: '#406080', C: '#4a7a40', x: '#555', h: '#555', o: '#05070d', w: '#2c6a80', i: '#c8dfee', g: '#3a6a2a', P: '#a070ff', Q: '#50e0ff', L: '#ffd060' }[ch] || (ch === '=' ? (M.doorAt(c, r) ? '#e0a030' : '#9a968c') : ch === 'b' ? (M.breakAt(c, r) ? '#a0703a' : '#9a968c') : '#9a968c');
     hx.fillRect(ox + c * s, oy + r * s, s, s);
   }
   hx.font = '700 14px Rajdhani, sans-serif'; hx.textAlign = 'center'; hx.fillStyle = '#fff';
-  for (const k of ['A', 'B']) { const S = M['site' + k]; hx.fillText(k, ox + S.x / M.cell * s, oy + S.z / M.cell * s + 5); }
+  for (const k of M.siteIds) { const S = M.sites[k]; hx.fillText(k, ox + S.x / M.cell * s, oy + S.z / M.cell * s + 5); }
   const P = (x, z) => [ox + x / M.cell * s, oy + z / M.cell * s];
   if (G.nucleo) { const [x, y] = P(G.nucleo.x, G.nucleo.z); hx.fillStyle = G.nucleo.planted ? '#ff5a5a' : '#7ff5ff'; hx.fillRect(x - 3, y - 3, 6, 6); }
   for (const p of G.players) {
@@ -657,7 +578,7 @@ function updateDom(dt) {
   else pr.style.display = 'none';
   // dica contextual
   let tip = '';
-  if (me.alive && me.nucleo && G.phase === 'live') tip = G.M.siteAt(me.x, me.z) ? 'Segure F para plantar o Núcleo' : 'Leve o Núcleo até o Site A ou B';
+  if (me.alive && me.nucleo && G.phase === 'live') tip = G.M.siteAt(me.x, me.z) ? 'Segure F para plantar o Núcleo' : 'Leve o Núcleo até um site (' + G.M.siteIds.join(', ') + ')';
   else if (me.alive && me.team !== G.attTeam() && G.phase === 'planted' && G.nucleo && Math.hypot(me.x - G.nucleo.x, me.z - G.nucleo.z) < 1.6) tip = 'Segure F para desarmar';
   else if (me.alive && G.drops.some(d => Math.hypot(d.x - me.x, d.z - me.z) < 1.6)) tip = 'Segure F para pegar a arma';
   else if (!me.alive) tip = 'Você morreu · assistindo um aliado';
@@ -676,8 +597,8 @@ function frame(now) {
   const dt = Math.min(0.1, (now - (App.last || now)) / 1000); App.last = now;
   gl.resize(FS.scale);
   if (!App.G) { // fundo do menu: câmera girando
-    const T = now / 1000, cam = { x: 40 + Math.sin(T * 0.1) * 20, y: 9, z: 26 + Math.cos(T * 0.1) * 14, yaw: T * 0.1 + Math.PI, pitch: -0.35, fov: 1.3 };
-    gl.begin(cam); gl.draw(App.mapMesh); return;
+    const T = now / 1000, cx = App.M.W, cz = App.M.H, cam = { x: cx + Math.sin(T * 0.08) * cx * 0.5, y: 11, z: cz + Math.cos(T * 0.08) * cz * 0.45, yaw: T * 0.08 + Math.PI, pitch: -0.42, fov: 1.25 };
+    gl.begin(cam, T); gl.draw(App.mapMesh); for (const l of App.lamps) gl.box(l.x, l.y, l.z, 0.14, 0.2, 0.14, l.col, { emis: 1, cast: false }); gl.flush(); return;
   }
   const G = App.G, me = App.me;
   if (App.running) { readInput(); simPump(now); }
@@ -688,9 +609,11 @@ function frame(now) {
   App.shake = Math.max(0, (App.shake || 0) - dt * 2);
   const sk = App.shake * 0.02;
   const cam = { x: view.x + rnd(-sk, sk), y: G.eye(view) + rnd(-sk, sk), z: view.z, yaw: view === me ? App.yaw : view.yaw, pitch: (view === me ? App.pitch : view.pitch) + (view === me ? (me.recoil || 0) * Math.PI / 180 * 0.6 : 0), fov: Math.atan(Math.tan(FS.fov * Math.PI / 180 / 2) / zoom * (innerHeight / innerWidth)) * 2 };
-  gl.begin(cam);
+  gl.begin(cam, now / 1000);
   drawWorld(now / 1000, dt);
+  gl.flush();
   if (view === me) drawViewmodel(now / 1000, dt);
+  gl.flush();
   drawHud(dt); updateDom(dt);
 }
 requestAnimationFrame(frame);
@@ -701,11 +624,12 @@ function bindSettings(s) {
   <label>Campo de visão <input type="range" min="80" max="115" step="1" value="${FS.fov}" data-k="fov"><b>${FS.fov}°</b></label>
   <label>Resolução <input type="range" min="0.5" max="1" step="0.05" value="${FS.scale}" data-k="scale"><b>${Math.round(FS.scale * 100)}%</b></label>
   <label>Volume <input type="range" min="0" max="100" step="1" value="${FS.vol}" data-k="vol"><b>${FS.vol}</b></label>
-  <label>Cor da mira <input type="color" value="${FS.xcol}" data-k="xcol"></label>`;
-  s.querySelectorAll('input').forEach(i => i.oninput = () => { FS[i.dataset.k] = i.type === 'color' ? i.value : +i.value; saveFS(); const b = i.nextElementSibling; if (b) b.textContent = i.dataset.k === 'scale' ? Math.round(FS.scale * 100) + '%' : i.dataset.k === 'fov' ? FS.fov + '°' : FS[i.dataset.k]; });
+  <label>Cor da mira <input type="color" value="${FS.xcol}" data-k="xcol"></label>
+  <label>Sombras <input type="range" min="0" max="1" step="1" value="${FS.shadows}" data-k="shadows"><b>${FS.shadows ? 'ligadas' : 'desligadas'}</b></label>`;
+  s.querySelectorAll('input').forEach(i => i.oninput = () => { FS[i.dataset.k] = i.type === 'color' ? i.value : +i.value; saveFS(); const b = i.nextElementSibling; if (b) gl.shadows = !!FS.shadows; b.textContent = i.dataset.k === 'shadows' ? (FS.shadows ? 'ligadas' : 'desligadas') : i.dataset.k === 'scale' ? Math.round(FS.scale * 100) + '%' : i.dataset.k === 'fov' ? FS.fov + '°' : FS[i.dataset.k]; });
 }
 bindSettings($('#fpset')); bindSettings($('#fpset2'));
-buildMenu();
+buildMenu(); buildMaps();
 
 // ---------------- conta: só quem está logado joga ----------------
 (function gate() {

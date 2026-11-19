@@ -98,7 +98,7 @@ h3{font-family:Cinzel,serif;margin:10px 0 8px}
 .buy-top b{font-family:Cinzel,serif;font-size:26px}
 .buy-top .cr{font-size:24px}
 .buy-top .bt{color:var(--dim);margin-left:auto}
-.buy-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.buy-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px}
 .bcol h4{margin:6px 0;color:var(--dim);font-size:13px;letter-spacing:2px;text-transform:uppercase}
 .bitem{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;background:#161b2c;border:1px solid var(--line);border-radius:8px;color:#fff;padding:10px 12px;margin-bottom:6px;cursor:pointer;font:700 15px Rajdhani,sans-serif;text-align:left}
 .bitem:hover:not(:disabled){border-color:var(--gold);background:#1f2640}
@@ -151,3 +151,21 @@ h3{font-family:Cinzel,serif;margin:10px 0 8px}
 .rfoot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px}
 #rmsg{color:var(--dim)}
 .wait{color:var(--dim);align-self:center}
+
+.bitem.wpn{flex-direction:column;align-items:stretch;gap:2px;padding:6px 8px;background:linear-gradient(160deg,#1c2238,#121628)}
+.bitem.wpn img{width:100%;height:46px;object-fit:contain;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))}
+.bitem.wpn span{font-size:14px}
+.bitem.wpn em{font-size:13px}
+.mpick{display:grid;grid-template-columns:repeat(8,1fr);gap:8px}
+.mpick.small{grid-template-columns:repeat(8,1fr)}
+.mcard{background:rgba(0,0,0,.35);border:2px solid var(--line);border-radius:9px;padding:6px;cursor:pointer;font-size:12px;line-height:1.2}
+.mcard:hover{border-color:#fff}
+.mcard.sel{border-color:var(--gold);box-shadow:0 0 14px rgba(255,207,106,.4)}
+.mcard b{display:block;font-family:Cinzel,serif;font-size:13px;margin-top:4px}
+.mcard em{display:block;font-style:normal;color:var(--cyan);font-weight:700}
+.mcard small{display:block;color:var(--dim);font-size:11px;margin-top:2px}
+.mpick.small .mcard small{display:none}
+.mprev{width:100%;aspect-ratio:40/26;border-radius:5px;display:block;image-rendering:pixelated;background:#1a1d28}
+.mprev.rnd{display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--gold);font-family:Cinzel,serif}
+@media (max-width:1100px){.mpick,.mpick.small{grid-template-columns:repeat(4,1fr)}.buy-grid{grid-template-columns:repeat(3,1fr)}}
+.vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 60%,rgba(0,0,0,.35) 100%)}
