@@ -38,7 +38,7 @@ const FPS_HUNTERS = {
   lumi: {
     c: { nome: 'Barreira de Luz', preco: 400, max: 1, desc: 'Ergue uma barreira sólida na frente (8s).' },
     q: { nome: 'Orbe Lento', preco: 200, max: 2, desc: 'Campo que deixa os inimigos muito lentos (6s).' },
-    e: { nome: 'Luz Curadora', free: 1, desc: 'Cura 60 de vida em você ou no aliado que você mira.' },
+    e: { nome: 'Véu de Luz', free: 2, desc: 'Cortina dourada onde você mira (15s). Bloqueia a visão.' },
     x: { nome: 'Ressurgir', desc: 'Revive o aliado caído mais perto da mira.' },
   },
   rocha: {
@@ -84,7 +84,7 @@ Object.assign(FPS_HUNTERS, {
   serra: {
     c: { nome: 'Mira Firme', preco: 200, max: 1, desc: 'Por 5s sua arma fica sem imprecisão e com metade do coice.' },
     q: { nome: 'Recuo Tático', preco: 150, max: 2, desc: 'Salta rápido para trás.' },
-    e: { nome: 'Sinalizador', free: 1, desc: 'Arremessa um sinalizador que revela inimigos perto dele por 4s.' },
+    e: { nome: 'Sensor de Flanco', free: 1, desc: 'Instala um sensor onde você mira (até 12m) que dura o round: revela e deixa lento quem passar.' },
     x: { nome: 'Bala Perfurante', desc: 'Os próximos 3 tiros atravessam paredes e causam mais dano.' },
   },
   fera: {
@@ -100,7 +100,7 @@ Object.assign(FPS_HUNTERS, {
     x: { nome: 'Redemoinho', desc: 'Redemoinho na mira: puxa os inimigos para o centro e deixa lentos.' },
   },
   elo: {
-    c: { nome: 'Fio Curador', preco: 200, max: 1, desc: 'Cura 60 de vida no aliado que você mira (ou em você).' },
+    c: { nome: 'Fios Lentos', preco: 200, max: 2, desc: 'Arremessa um novelo de fios que deixa a área lenta por 6s.' },
     q: { nome: 'Pulso Restaurador', preco: 250, max: 1, desc: 'Cura 35 de vida em todos os aliados perto.' },
     e: { nome: 'Escudo de Éter', free: 1, desc: 'Dá 30 de escudo ao aliado que você mira (ou a você).' },
     x: { nome: 'Renascer', desc: 'Por 10s, aliados perto não morrem: ao cair, voltam com 40 de vida (uma vez).' },
@@ -126,11 +126,11 @@ Object.assign(FPS_HUNTERS, {
   teia: {
     c: { nome: 'Armadilha', preco: 200, max: 2, desc: 'Fio escondido no chão: quem passa fica preso, lento e revelado.' },
     q: { nome: 'Casulo', preco: 250, max: 1, desc: 'Arremessa uma bola de teia que deixa a área lenta.' },
-    e: { nome: 'Véu', free: 2, desc: 'Cortina roxa onde você mira (14s). Bloqueia a visão.' },
+    e: { nome: 'Teia Vigia', free: 1, desc: 'Tece uma teia aos seus pés que dura o round: quem pisar fica preso, lento e revelado.' },
     x: { nome: 'Grande Teia', desc: 'Teia gigante na mira: deixa lento e revela todos dentro por 8s.' },
   },
   brisa: {
-    c: { nome: 'Corrente de Ar', preco: 200, max: 1, desc: 'Você e aliados perto ficam mais rápidos por 5s.' },
+    c: { nome: 'Redemoinho Vigia', preco: 200, max: 2, desc: 'Deixa um redemoinho parado onde você mira (até 12m) que dura o round: revela e deixa lento quem passar.' },
     q: { nome: 'Rajada Repulsora', preco: 250, max: 1, desc: 'Empurra para longe os inimigos à sua frente.' },
     e: { nome: 'Sopro Curador', free: 1, desc: 'Cura 50 no aliado que você mira (ou em você).' },
     x: { nome: 'Olho do Furacão', desc: 'Área calma em volta de você: aliados dentro se curam e levam menos dano.' },
@@ -138,7 +138,7 @@ Object.assign(FPS_HUNTERS, {
   egide: {
     c: { nome: 'Escudo Erguido', preco: 300, max: 1, desc: 'Ergue um escudo alto e sólido à frente (10s).' },
     q: { nome: 'Provocar', preco: 200, max: 1, desc: 'Inimigos à frente ficam revelados e lentos.' },
-    e: { nome: 'Golpe de Escudo', free: 1, desc: 'Empurra e atordoa quem estiver colado na sua frente.' },
+    e: { nome: 'Cortina de Bronze', free: 2, desc: 'Cortina de fumaça cor de bronze onde você mira (15s). Bloqueia a visão.' },
     x: { nome: 'Égide Ancestral', desc: 'Aliados perto ganham 50 de escudo e levam menos dano por 6s.' },
   },
 });

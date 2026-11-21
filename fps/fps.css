@@ -234,3 +234,12 @@ h3{font-family:Cinzel,serif;margin:10px 0 8px}
 .mplay .online{justify-content:center}
 .mplay .acct{text-align:center;margin-top:6px;min-height:0}
 h3 small{font:600 12px Rajdhani,sans-serif;color:var(--dim);letter-spacing:0}
+.qual{grid-column:1/-1;display:flex;align-items:center;gap:8px}
+.qual span{font-weight:700;margin-right:4px}
+.qual button{background:#151a2b;border:1px solid var(--line);color:#dfe5f2;border-radius:8px;padding:6px 14px;font:700 14px Rajdhani,sans-serif;cursor:pointer}
+.qual button.on{background:linear-gradient(#ffd77a,#d9a43a);color:#1a1206;border-color:#ffe3a0}
+.qhint{grid-column:1/-1;color:var(--dim);margin-top:-4px}
+.fpset input[type=checkbox]{width:18px;height:18px;margin-left:auto}
+.rolehd{grid-column:1/-1;display:flex;align-items:baseline;gap:10px;margin:10px 0 2px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.rolehd b{font-family:Cinzel,serif;font-size:17px;letter-spacing:1px}
+.rolehd small{color:var(--dim)}

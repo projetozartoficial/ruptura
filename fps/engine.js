@@ -85,19 +85,31 @@ precision highp sampler2DShadow;
 in vec3 vW; in vec3 vN; in vec3 vC; in float vMat;
 uniform vec3 uCam; uniform vec4 uTint; uniform float uEmis; uniform vec3 uFog; uniform float uFogD; uniform float uMatO;
 uniform vec3 uSun; uniform vec3 uSunCol; uniform vec3 uSky; uniform float uAmb; uniform float uTime;
-uniform mat4 uLVP; uniform sampler2DShadow uShadow; uniform float uUseShadow;
+uniform mat4 uLVP; uniform sampler2DShadow uShadow; uniform float uUseShadow; uniform sampler2D uNoise; uniform float uSM;
 out vec4 o;
 float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
-float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y); }
-float fbm(vec2 p){ float v=0.0, a=0.5; for(int i=0;i<4;i++){ v+=a*noise(p); p*=2.03; a*=0.5; } return v; }
+// ruído vindo de uma textura (bem mais barato que calcular na hora)
+float noise(vec2 p){ return texture(uNoise, p * (1.0 / 64.0)).r; }
+float fbm(vec2 p){ float v = 0.5 * noise(p) + 0.25 * noise(p * 2.03 + 17.3);
+#ifdef HQ
+  v += 0.125 * noise(p * 4.1 + 41.7) + 0.0625 * noise(p * 8.3 + 5.1);
+#else
+  v += 0.1875 * noise(p * 4.1 + 41.7);
+#endif
+  return v; }
 vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }
 float shadowAt(vec3 w, vec3 n){
   if (uUseShadow < 0.5) return 1.0;
   vec4 lp = uLVP * vec4(w + n * 0.06, 1.0); vec3 p = lp.xyz / lp.w * 0.5 + 0.5;
   if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0 || p.z > 1.0) return 1.0;
-  float s = 0.0, t = 1.0 / 2048.0;
-  for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) s += texture(uShadow, vec3(p.xy + vec2(x, y) * t * 1.2, p.z - 0.0015));
-  return s / 9.0;
+  float t = 1.0 / uSM, z = p.z - 0.0015;
+#ifdef HQ
+  // 4 amostras com filtro bilinear do hardware = borda suave (equivale a 16)
+  return 0.25 * (texture(uShadow, vec3(p.xy + vec2(-0.6, -0.6) * t, z)) + texture(uShadow, vec3(p.xy + vec2(0.6, -0.6) * t, z))
+               + texture(uShadow, vec3(p.xy + vec2(-0.6, 0.6) * t, z)) + texture(uShadow, vec3(p.xy + vec2(0.6, 0.6) * t, z)));
+#else
+  return texture(uShadow, vec3(p.xy, z));
+#endif
 }
 void main(){
   vec3 n = normalize(vN);
@@ -148,10 +160,9 @@ void main(){
 const SKY_VS = `#version 300 es
 in vec2 p; out vec2 v; void main(){ v = p; gl_Position = vec4(p, 0.9999, 1.0); }`;
 const SKY_FS = `#version 300 es
-precision highp float; in vec2 v; uniform mat4 uInv; uniform vec3 uTop; uniform vec3 uHor; uniform vec3 uSun; uniform vec3 uSunCol; uniform float uTime; out vec4 o;
-float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
-float noise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y); }
-float fbm(vec2 p){ float s=0.0, a=0.5; for(int i=0;i<5;i++){ s+=a*noise(p); p*=2.1; a*=0.5; } return s; }
+precision highp float; in vec2 v; uniform mat4 uInv; uniform vec3 uTop; uniform vec3 uHor; uniform vec3 uSun; uniform vec3 uSunCol; uniform float uTime; uniform sampler2D uNoise; out vec4 o;
+float noise(vec2 p){ return texture(uNoise, p * (1.0 / 64.0)).r; }
+float fbm(vec2 p){ return 0.5 * noise(p) + 0.25 * noise(p * 2.1 + 9.1) + 0.125 * noise(p * 4.4 + 3.7) + 0.0625 * noise(p * 9.0 + 1.3); }
 void main(){
   vec4 a = uInv * vec4(v, 1.0, 1.0), b = uInv * vec4(v, -1.0, 1.0);
   vec3 d = normalize(a.xyz / a.w - b.xyz / b.w);
@@ -164,34 +175,65 @@ void main(){
   o = vec4(c, 1.0);
 }`;
 
+// textura de ruído suave que se repete (64 células em 256 px), usada nas texturas e nas nuvens
+function noiseTex(g) {
+  const N = 256, C = 64, k = N / C, L = new Float32Array(C * C);
+  let sd = 1234567; const rr = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < L.length; i++) L[i] = rr();
+  const d = new Uint8Array(N * N * 4), sm = t => t * t * (3 - 2 * t);
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const gx = x / k, gy = y / k, ix = Math.floor(gx), iy = Math.floor(gy), fx = sm(gx - ix), fy = sm(gy - iy);
+    const a = L[(iy % C) * C + ix % C], b = L[(iy % C) * C + (ix + 1) % C], c = L[((iy + 1) % C) * C + ix % C], e = L[((iy + 1) % C) * C + (ix + 1) % C];
+    const v = (a + (b - a) * fx) * (1 - fy) + (c + (e - c) * fx) * fy, o = (y * N + x) * 4;
+    d[o] = d[o + 1] = d[o + 2] = v * 255; d[o + 3] = 255;
+  }
+  const t = g.createTexture(); g.bindTexture(g.TEXTURE_2D, t);
+  g.texImage2D(g.TEXTURE_2D, 0, g.RGBA8, N, N, 0, g.RGBA, g.UNSIGNED_BYTE, d);
+  g.generateMipmap(g.TEXTURE_2D);
+  g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR_MIPMAP_LINEAR); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
+  g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.REPEAT); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.REPEAT);
+  return t;
+}
+
 class GL {
-  constructor(canvas) {
-    this.c = canvas;
-    const g = this.g = canvas.getContext('webgl2', { antialias: true, alpha: false, powerPreference: 'high-performance' });
+  // opt.hq: qualidade alta (true) ou modo desempenho (false); opt.aa: antisserrilhado
+  constructor(canvas, opt = {}) {
+    this.c = canvas; this.hq = opt.hq !== false;
+    const g = this.g = canvas.getContext('webgl2', { antialias: opt.aa !== false, alpha: false, powerPreference: 'high-performance' });
     if (!g) throw new Error('Seu navegador não suporta WebGL2 (necessário para o modo FPS).');
-    this.prog = this.mk(VS, FS_SRC);
+    const def = src => src.replace('precision highp float;', 'precision highp float;\n' + (this.hq ? '#define HQ\n' : ''));
+    this.prog = this.mk(VS, def(FS_SRC));
     this.dprog = this.mk(VS, DEPTH_FS);
     this.sky = this.mk(SKY_VS, SKY_FS);
     const P = this.prog; this.u = {};
-    for (const n of ['uVP', 'uM', 'uCam', 'uTint', 'uEmis', 'uFog', 'uFogD', 'uMatO', 'uSun', 'uSunCol', 'uSky', 'uAmb', 'uTime', 'uLVP', 'uShadow', 'uUseShadow']) this.u[n] = g.getUniformLocation(P, n);
+    for (const n of ['uVP', 'uM', 'uCam', 'uTint', 'uEmis', 'uFog', 'uFogD', 'uMatO', 'uSun', 'uSunCol', 'uSky', 'uAmb', 'uTime', 'uLVP', 'uShadow', 'uUseShadow', 'uNoise', 'uSM']) this.u[n] = g.getUniformLocation(P, n);
     this.du = { uVP: g.getUniformLocation(this.dprog, 'uVP'), uM: g.getUniformLocation(this.dprog, 'uM') };
-    this.su = {}; for (const n of ['uInv', 'uTop', 'uHor', 'uSun', 'uSunCol', 'uTime']) this.su[n] = g.getUniformLocation(this.sky, n);
+    this.su = {}; for (const n of ['uInv', 'uTop', 'uHor', 'uSun', 'uSunCol', 'uTime', 'uNoise']) this.su[n] = g.getUniformLocation(this.sky, n);
     this.skyBuf = g.createBuffer(); g.bindBuffer(g.ARRAY_BUFFER, this.skyBuf); g.bufferData(g.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), g.STATIC_DRAW);
     this.skyVao = g.createVertexArray(); g.bindVertexArray(this.skyVao);
     const sp = g.getAttribLocation(this.sky, 'p'); g.enableVertexAttribArray(sp); g.vertexAttribPointer(sp, 2, g.FLOAT, false, 0, 0);
     this.cube = this.mesh(boxGeo([{ x: 0, y: 0, z: 0, w: 1, h: 1, d: 1, col: [1, 1, 1], mat: 0, center: true }]));
     this.sph = this.mesh(sphereGeo(14, 10));
     // mapa de sombras
-    this.SM = 2048;
-    this.shTex = g.createTexture(); g.bindTexture(g.TEXTURE_2D, this.shTex);
-    g.texStorage2D(g.TEXTURE_2D, 1, g.DEPTH_COMPONENT24, this.SM, this.SM);
-    g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
-    g.texParameteri(g.TEXTURE_2D, g.TEXTURE_COMPARE_MODE, g.COMPARE_REF_TO_TEXTURE); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_COMPARE_FUNC, g.LEQUAL);
-    g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
-    this.shFbo = g.createFramebuffer(); g.bindFramebuffer(g.FRAMEBUFFER, this.shFbo);
-    g.framebufferTexture2D(g.FRAMEBUFFER, g.DEPTH_ATTACHMENT, g.TEXTURE_2D, this.shTex, 0);
-    g.drawBuffers([g.NONE]); g.readBuffer(g.NONE);
+    // o mapa (parado) é desenhado na sombra uma vez só e copiado a cada quadro;
+    // só o que se mexe (jogadores, portas, objetos) é redesenhado
+    this.SM = this.hq ? 2048 : 1024;
+    const mkDepth = () => {
+      const t = g.createTexture(); g.bindTexture(g.TEXTURE_2D, t);
+      g.texStorage2D(g.TEXTURE_2D, 1, g.DEPTH_COMPONENT24, this.SM, this.SM);
+      g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MIN_FILTER, g.LINEAR); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_MAG_FILTER, g.LINEAR);
+      g.texParameteri(g.TEXTURE_2D, g.TEXTURE_COMPARE_MODE, g.COMPARE_REF_TO_TEXTURE); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_COMPARE_FUNC, g.LEQUAL);
+      g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_S, g.CLAMP_TO_EDGE); g.texParameteri(g.TEXTURE_2D, g.TEXTURE_WRAP_T, g.CLAMP_TO_EDGE);
+      const f = g.createFramebuffer(); g.bindFramebuffer(g.FRAMEBUFFER, f);
+      g.framebufferTexture2D(g.FRAMEBUFFER, g.DEPTH_ATTACHMENT, g.TEXTURE_2D, t, 0);
+      g.drawBuffers([g.NONE]); g.readBuffer(g.NONE);
+      return [t, f];
+    };
+    [this.shTex, this.shFbo] = mkDepth();
+    [this.stTex, this.stFbo] = mkDepth();
     g.bindFramebuffer(g.FRAMEBUFFER, null);
+    this.noise = noiseTex(g);
+    this.stats = { draws: 0 };
     this.shadows = true;
     this.setTheme({ sky: [0.32, 0.5, 0.78], fog: [0.62, 0.68, 0.76], sun: [0.45, 0.85, 0.3], sunCol: [1, 0.95, 0.85], amb: 0.55 }, 80, 52);
     this.fogD = 0.010; this.q = [];
@@ -202,7 +244,7 @@ class GL {
     const L = T.sun, l = Math.hypot(...L), d = [L[0] / l, L[1] / l, L[2] / l];
     const cx = mw / 2, cz = mh / 2, R = Math.hypot(mw, mh) / 2 + 4;
     const V = M4.look(cx + d[0] * 120, d[1] * 120, cz + d[2] * 120, -d[0], -d[1], -d[2]);
-    this.LVP = M4.mul(M4.ortho(-R, R, -R, R, 20, 260), V);
+    this.LVP = M4.mul(M4.ortho(-R, R, -R, R, 20, 260), V); this.mw = mw; this.mh = mh;
     this.shadowDirty = true;
   }
   mk(vs, fs) {
@@ -243,37 +285,53 @@ class GL {
     const g = this.g, T = this.T, cam = this.cam;
     // 1) sombras
     if (this.shadows) {
-      g.bindFramebuffer(g.FRAMEBUFFER, this.shFbo); g.viewport(0, 0, this.SM, this.SM);
-      g.clear(g.DEPTH_BUFFER_BIT); g.useProgram(this.dprog); g.uniformMatrix4fv(this.du.uVP, false, this.LVP);
+      g.useProgram(this.dprog); g.uniformMatrix4fv(this.du.uVP, false, this.LVP);
       g.enable(g.POLYGON_OFFSET_FILL); g.polygonOffset(2, 4); g.disable(g.CULL_FACE);
-      for (const it of this.q) if (it.cast !== false) { g.uniformMatrix4fv(this.du.uM, false, it.M); g.bindVertexArray(it.mesh.vao); g.drawArrays(g.TRIANGLES, 0, it.mesh.n); }
+      const shadowOf = it => { g.uniformMatrix4fv(this.du.uM, false, it.M); g.bindVertexArray(it.mesh.vao); g.drawArrays(g.TRIANGLES, 0, it.mesh.n); this.stats.draws++; };
+      const stat = this.q.filter(it => it.stat);
+      const key = stat.map(it => it.mesh.n).join(',');
+      if (this.shadowDirty || key !== this.stKey) { // refaz a sombra do mapa (troca de mapa/tema)
+        g.bindFramebuffer(g.FRAMEBUFFER, this.stFbo); g.viewport(0, 0, this.SM, this.SM); g.clear(g.DEPTH_BUFFER_BIT);
+        for (const it of stat) shadowOf(it);
+        this.shadowDirty = false; this.stKey = key;
+      }
+      g.bindFramebuffer(g.READ_FRAMEBUFFER, this.stFbo); g.bindFramebuffer(g.DRAW_FRAMEBUFFER, this.shFbo);
+      g.blitFramebuffer(0, 0, this.SM, this.SM, 0, 0, this.SM, this.SM, g.DEPTH_BUFFER_BIT, g.NEAREST);
+      g.bindFramebuffer(g.FRAMEBUFFER, this.shFbo); g.viewport(0, 0, this.SM, this.SM);
+      for (const it of this.q) if (it.cast !== false && !it.stat && this.inShadowRange(it)) shadowOf(it);
       g.disable(g.POLYGON_OFFSET_FILL); g.enable(g.CULL_FACE);
       g.bindFramebuffer(g.FRAMEBUFFER, null);
     }
-    // 2) céu
     g.viewport(0, 0, this.c.width, this.c.height);
     g.clearColor(this.fog[0], this.fog[1], this.fog[2], 1); g.clear(g.COLOR_BUFFER_BIT | g.DEPTH_BUFFER_BIT);
-    g.useProgram(this.sky); g.disable(g.DEPTH_TEST); g.bindVertexArray(this.skyVao);
-    g.uniformMatrix4fv(this.su.uInv, false, M4.inv(this.VP)); g.uniform3fv(this.su.uTop, T.sky); g.uniform3fv(this.su.uHor, T.fog);
-    g.uniform3fv(this.su.uSun, T.sun); g.uniform3fv(this.su.uSunCol, T.sunCol); g.uniform1f(this.su.uTime, this.time);
-    g.drawArrays(g.TRIANGLES, 0, 3); g.enable(g.DEPTH_TEST);
-    // 3) cena
+    g.activeTexture(g.TEXTURE1); g.bindTexture(g.TEXTURE_2D, this.noise); g.activeTexture(g.TEXTURE0);
+    // 2) cena (o mapa por último: o que está na frente já tapa os pixels dele)
     g.useProgram(this.prog);
     const u = this.u;
     g.uniformMatrix4fv(u.uVP, false, this.VP); g.uniform3f(u.uCam, cam.x, cam.y, cam.z);
     g.uniform3fv(u.uFog, this.fog); g.uniform1f(u.uFogD, this.fogD);
     g.uniform3fv(u.uSun, T.sun); g.uniform3fv(u.uSunCol, T.sunCol); g.uniform3fv(u.uSky, T.sky); g.uniform1f(u.uAmb, T.amb); g.uniform1f(u.uTime, this.time);
     g.uniformMatrix4fv(u.uLVP, false, this.LVP); g.activeTexture(g.TEXTURE0); g.bindTexture(g.TEXTURE_2D, this.shTex); g.uniform1i(u.uShadow, 0); g.uniform1f(u.uUseShadow, this.shadows ? 1 : 0);
+    g.uniform1i(u.uNoise, 1); g.uniform1f(u.uSM, this.SM);
     g.uniform1f(u.uMatO, -1);
-    for (const it of this.q) { g.uniform4f(u.uTint, it.c[0], it.c[1], it.c[2], 1); g.uniform1f(u.uEmis, it.e); g.uniform1f(u.uMatO, it.mat ?? -1); g.uniformMatrix4fv(u.uM, false, it.M); g.bindVertexArray(it.mesh.vao); g.drawArrays(g.TRIANGLES, 0, it.mesh.n); }
+    this.q.sort((a, b) => (a.stat ? 1 : 0) - (b.stat ? 1 : 0));
+    for (const it of this.q) { this.stats.draws++; g.uniform4f(u.uTint, it.c[0], it.c[1], it.c[2], 1); g.uniform1f(u.uEmis, it.e); g.uniform1f(u.uMatO, it.mat ?? -1); g.uniformMatrix4fv(u.uM, false, it.M); g.bindVertexArray(it.mesh.vao); g.drawArrays(g.TRIANGLES, 0, it.mesh.n); }
     g.uniform1f(u.uMatO, -1);
+    // 3) céu por último: só é calculado onde nada o tapa
+    g.useProgram(this.sky); g.depthFunc(g.LEQUAL); g.depthMask(false); g.bindVertexArray(this.skyVao);
+    g.uniformMatrix4fv(this.su.uInv, false, M4.inv(this.VP)); g.uniform3fv(this.su.uTop, T.sky); g.uniform3fv(this.su.uHor, T.fog);
+    g.uniform3fv(this.su.uSun, T.sun); g.uniform3fv(this.su.uSunCol, T.sunCol); g.uniform1f(this.su.uTime, this.time); g.uniform1i(this.su.uNoise, 1);
+    g.drawArrays(g.TRIANGLES, 0, 3); g.depthMask(true); g.depthFunc(g.LESS);
+    g.useProgram(this.prog);
     this.q = [];
   }
+  // objetos fora da área do mapa de sombras não precisam ser desenhados nele
+  inShadowRange(it) { const M = it.M; return M[12] > -8 && M[14] > -8 && M[12] < this.mw + 8 && M[14] < this.mh + 8; }
   tint(r, g_, b, a = 1, emis = 0) { this.g.uniform4f(this.u.uTint, r, g_, b, a); this.g.uniform1f(this.u.uEmis, emis); }
   // desenha (ou põe na fila, se ainda for a parte opaca do quadro)
   put(mesh, M, col, opt = {}) {
     const a = opt.a ?? 1;
-    if (!this.flushed && a >= 1) { this.q.push({ mesh, M, c: col, e: opt.emis || 0, mat: opt.mat, cast: opt.cast }); return; }
+    if (!this.flushed && a >= 1) { this.q.push({ mesh, M, c: col, e: opt.emis || 0, mat: opt.mat, cast: opt.cast, stat: opt.stat }); return; }
     const g = this.g; this.tint(col[0], col[1], col[2], a, opt.emis || 0);
     if (opt.mat != null) g.uniform1f(this.u.uMatO, opt.mat);
     g.uniformMatrix4fv(this.u.uM, false, M); g.bindVertexArray(mesh.vao); g.drawArrays(g.TRIANGLES, 0, mesh.n);

@@ -114,20 +114,19 @@ function drawPlayer(p, T) {
   part(0, hip + 0.37, 0, 0.48, 0.52, 0.28, col('roupa'));
   part(0, hip + 0.45, -0.145, 0.36, 0.3, 0.02, col('detalhe'));
   part(0, hip + 0.12, -0.13, 0.46, 0.05, 0.03, col('detalhe'));
-  // ombros (vanguarda tem ombreiras grandes)
-  const big = cls === 'vanguarda';
+  // ombros (guardião tem ombreiras grandes)
+  const big = cls === 'guardiao';
   for (const sd of [-1, 1]) part(sd * (big ? 0.31 : 0.27), hip + 0.6, 0, big ? 0.26 : 0.18, big ? 0.16 : 0.12, big ? 0.34 : 0.26, big ? [0.55, 0.56, 0.6] : col('roupa2'), 0, big ? { mat: 4 } : {});
   // capa/cachecol por classe
-  if (cls === 'controlador') part(0, hip + 0.2, 0.18, 0.46, 0.8, 0.04, col('roupa2'), 0.12 + Math.sin(T * 3 + p.id) * 0.05);
-  if (cls === 'lutador') part(0.12, hip + 0.45, 0.17, 0.12, 0.5, 0.04, col('detalhe'), 0.3 + sw * 0.3);
+  if (cls === 'dominador') part(0, hip + 0.2, 0.18, 0.46, 0.8, 0.04, col('roupa2'), 0.12 + Math.sin(T * 3 + p.id) * 0.05);
+  if (cls === 'desafiante') part(0.12, hip + 0.45, 0.17, 0.12, 0.5, 0.04, col('detalhe'), 0.3 + sw * 0.3);
   // cabeça
   part(0, h - 0.33, 0, 0.12, 0.08, 0.12, col('pele'));
   part(0, h - 0.17, 0, 0.27, 0.29, 0.28, col('pele'));
   part(0, h - 0.04, 0.03, 0.31, 0.12, 0.32, col('cabelo'));
   part(0, h - 0.12, 0.13, 0.29, 0.2, 0.06, col('cabelo'));
-  if (cls === 'iniciador') part(0, h - 0.08, 0.05, 0.34, 0.3, 0.34, col('roupa2'));
-  part(0, h - 0.16, -0.145, 0.22, 0.05, 0.02, cls === 'protetor' ? col('detalhe') : [0.08, 0.08, 0.1], 0, cls === 'protetor' ? { emis: 0.8 } : {});
-  if (cls === 'protetor') part(0, h + 0.12, 0, 0.36, 0.03, 0.36, col('detalhe'), 0, { emis: 0.9, cast: false });
+  if (cls === 'batedor') part(0, h - 0.08, 0.05, 0.34, 0.3, 0.34, col('roupa2'));
+  part(0, h - 0.16, -0.145, 0.22, 0.05, 0.02, cls === 'guardiao' ? col('detalhe') : [0.08, 0.08, 0.1], 0, cls === 'guardiao' ? { emis: 0.8 } : {});
   // braços apontando para a mira
   const ap = p.pitch, W = App.G.curW(p);
   const sh = [0.27, hip + 0.55, -0.02];
@@ -153,7 +152,7 @@ function drawPlayer(p, T) {
 // ---------------- mundo ----------------
 function drawWorld(T, dt) {
   const G = App.G, me = App.me, M = G.M;
-  gl.draw(App.mapMesh);
+  gl.draw(App.mapMesh, null, { stat: true });
   // portões (sobem quando abertos)
   for (const d of M.doors) {
     d.anim = d.anim ?? (d.open ? 1 : 0); d.anim += ((d.open ? 1 : 0) - d.anim) * Math.min(1, dt * 4);
@@ -219,7 +218,7 @@ function drawWorld(T, dt) {
   for (const w of G.temp) if (!w.solid) gl.box((w.x0 + w.x1) / 2, (w.y0 + w.y1) / 2, (w.z0 + w.z1) / 2, w.x1 - w.x0, w.y1 - w.y0, w.z1 - w.z0, [0.25, 0.55, 0.85], { a: 0.75, emis: 0.3 });
   for (const s of G.smokes) {
     const f = Math.min(1, (s.T - s.t) / 0.6, s.t / 0.8);
-    const c = [[0.72, 0.8, 0.9], [0.85, 0.9, 0.95], [0.35, 0.6, 0.3], [0.85, 0.72, 0.5], [0.55, 0.38, 0.75]][s.col || 0];
+    const c = [[0.72, 0.8, 0.9], [0.85, 0.9, 0.95], [0.35, 0.6, 0.3], [0.85, 0.72, 0.5], [0.55, 0.38, 0.75], [0.95, 0.86, 0.55], [0.72, 0.55, 0.36]][s.col || 0];
     for (let i = 0; i < 3; i++) gl.ball(s.x + Math.sin(T * 0.3 + i * 2) * 0.3, s.y - i * 0.2, s.z + Math.cos(T * 0.3 + i * 2) * 0.3, s.r * 2 * f * (1 - i * 0.1), s.r * 1.8 * f * (1 - i * 0.1), s.r * 2 * f * (1 - i * 0.1), c, { a: 0.6 + i * 0.15, ry: i * 0.5 + T * 0.1 });
   }
   gl.blend(false);

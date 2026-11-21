@@ -9,7 +9,12 @@ FPS tático em primeira pessoa, 5 contra 5.
 - O ataque leva o **Núcleo** até um site e planta; a defesa impede ou desarma. Vence quem fizer **7 rounds**; troca de lado depois do round 6 (6×6 vai pra prorrogação, precisa abrir 2).
 - **Economia:** começo ◈800 · vitória ◈3000 · derrota ◈1900 / 2400 / 2900 · abate ◈200 · plantar ◈300 para o time.
 - **Arsenal:** 16 armas + faca (pistolas, SMGs, escopetas, rifles, snipers e metralhadoras) e escudos leve/pesado.
-- **20 caçadores**, 4 por classe. Cada um tem 2 habilidades compradas (C e Q), 1 grátis por round (E) e um ultimate carregado por pontos (X).
+- **20 caçadores**, 5 por função. Cada um tem 2 habilidades compradas (C e Q), 1 grátis por round (E) e um ultimate carregado por pontos (X).
+  - **Desafiantes** (Brasa, Lâmina, Fera, Bisão, Vespa) — abrem espaço, puxam a entrada e vencem os duelos diretos.
+  - **Dominadores** (Maré, Vinha, Duna, Lumi, Égide) — cortinas de fumaça e barreiras que negam visão e ditam o ritmo das entradas e retomadas.
+  - **Batedores** (Corvo, Trovão, Rocha, Âncora, Cometa) — revelam posições, atordoam e cegam, preparando o terreno para o time.
+  - **Guardiões** (Sino, Teia, Elo, Brisa, Serra) — armadilhas e sensores que protegem áreas, vigiam flancos e atrasam o avanço.
+  - Os bots montam o time tentando ter uma função de cada.
 - **7 mapas**, cada um com uma mecânica que muda a estratégia:
 
 | Mapa | Mecânica |
@@ -40,6 +45,12 @@ FPS tático em primeira pessoa, 5 contra 5.
 - **Perfil:** nível, XP, elo, pico, estatísticas, caçadores favoritos e últimas partidas.
 - **Amigos:** adicione pelo ID, veja quem está online/em sala/em partida, convide para sua sala ou entre na sala deles.
 - **Privacidade:** esconder os nomes dos outros jogadores e o código da sala (bom para live).
+
+## Gráficos e desempenho
+- **Alta qualidade** (padrão): sombras suaves, texturas detalhadas e antisserrilhado.
+- **Desempenho**: sombra e textura simplificadas e sem antisserrilhado. Fica mais leve e o visual muda pouco.
+- **Resolução automática** (ligada por padrão): se o FPS cair abaixo de ~55, a resolução interna baixa um pouco; quando sobra folga, volta a subir.
+- **Mostrar FPS** nas configurações para acompanhar.
 
 ## Configurar as contas (Firebase)
 Só joga quem conectar a conta Google.

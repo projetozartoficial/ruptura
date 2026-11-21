@@ -5,7 +5,7 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TEAM_NAME = ['Alvorada', 'Crepúsculo'], TEAM_COL = ['#3fa9ff', '#ff5a4a'];
 const BOT_NAMES_F = ['Eco', 'Vulto', 'Faísca', 'Garoa', 'Breu', 'Ônix', 'Sina', 'Musgo', 'Rajada', 'Cinza', 'Neblina', 'Trovo'];
-const FPSET_DEF = { sens: 0.35, fov: 103, scale: 1, xcol: '#5dff9a', vol: 70, shadows: 1 };
+const FPSET_DEF = { sens: 0.35, fov: 103, scale: 1, xcol: '#5dff9a', vol: 70, shadows: 1, quality: 'alta', autoRes: 1, showFps: 0 };
 let FS = Object.assign({}, FPSET_DEF); try { Object.assign(FS, JSON.parse(localStorage.getItem('ruptura-fps') || '{}')); } catch (e) { }
 const saveFS = () => { try { localStorage.setItem('ruptura-fps', JSON.stringify(FS)); } catch (e) { } };
 
@@ -32,13 +32,15 @@ const AU = {
 
 // ---------------- início ----------------
 let gl;
-try { gl = App.gl = new GL($('#cv')); } catch (e) { $('#gate').innerHTML = `<h2>Não deu para abrir o modo FPS</h2><p>${esc(e.message)}</p><a class="btn" href="index.html">Tentar de novo</a>`; throw e; }
+const HQ = FS.quality !== 'desempenho';
+try { gl = App.gl = new GL($('#cv'), { hq: HQ, aa: HQ }); } catch (e) { $('#gate').innerHTML = `<h2>Não deu para abrir o modo FPS</h2><p>${esc(e.message)}</p><a class="btn" href="index.html">Tentar de novo</a>`; throw e; }
 App.mapSel = 'random'; try { App.mapSel = localStorage.getItem('ruptura-fps-map') || 'random'; } catch (e) { }
 loadMap(FPS_MAP_IDS.includes(App.mapSel) ? App.mapSel : 'vesper'); gl.shadows = !!FS.shadows;
 
 function buildMenu() {
   const box = $('#pick'); box.innerHTML = '';
-  for (const h of FPS_HUNTER_IDS) {
+  for (const h of HUNTERS_BY_ROLE) {
+    if (h === HUNTERS_BY_ROLE.find(x => HUNTERS[x].classe === HUNTERS[h].classe)) { const C = CLASSES[HUNTERS[h].classe]; box.insertAdjacentHTML('beforeend', `<div class="rolehd"><b style="color:${C.cor}">${C.icone} ${C.nome}</b><small>${C.desc}</small></div>`); }
     const H = HUNTERS[h], C = CLASSES[H.classe], F = FPS_HUNTERS[h];
     const d = document.createElement('div'); d.className = 'hcard' + (App.hunter === h ? ' sel' : '');
     const cv = hunterPortraitFPS(h); d.appendChild(cv);
@@ -81,6 +83,9 @@ function myInfo() {
   const P = Account.profile, u = Account.user;
   return P ? { uid: u ? u.uid : null, tag: P.tag || '', lvl: P.level, rank: P.rank, mmr: P.mmr, pl: P.placements } : { lvl: 1, rank: -1, mmr: 1000, pl: 0 };
 }
+// caçadores agrupados pela função (Desafiante, Dominador, Batedor, Guardião)
+const ROLE_ORDER = Object.keys(CLASSES);
+const HUNTERS_BY_ROLE = FPS_HUNTER_IDS.slice().sort((a, b) => ROLE_ORDER.indexOf(HUNTERS[a].classe) - ROLE_ORDER.indexOf(HUNTERS[b].classe));
 const KIND_NAME = { solo: 'Contra bots', custom: 'Sala personalizada', ranked: 'Ranqueada' };
 App.kind = 'solo';
 App.role = 'solo'; App.net = new URLSearchParams(location.search).get('net') === 'local' ? 'local' : 'online';
@@ -90,7 +95,10 @@ function botSlots(slots) {
   return slots.map((s, i) => {
     if (s.kind !== 'empty') return s;
     const U = used[i < RULES.teamSize ? 0 : 1], free = FPS_HUNTER_IDS.filter(h => !U.includes(h));
-    const h = free[(Math.random() * free.length) | 0] || FPS_HUNTER_IDS[(Math.random() * 5) | 0];
+    // bots montam um time equilibrado: primeiro as funções que ainda faltam
+    const roles = U.map(x => HUNTERS[x].classe), need = free.filter(h => !roles.includes(HUNTERS[h].classe));
+    const pool = need.length ? need : free;
+    const h = pool[(Math.random() * pool.length) | 0] || FPS_HUNTER_IDS[(Math.random() * 5) | 0];
     U.push(h); return { kind: 'bot', name: names.pop() + ' [bot]', hunter: h };
   });
 }
@@ -111,6 +119,7 @@ function startMatch(slotsIn, mapId) {
   if (typeof Social !== "undefined") Social.presence('game');
 }
 function quitMatch() {
+  if ((FS.quality !== 'desempenho') !== HQ) setTimeout(() => location.reload(), 50);
   // sair de uma ranqueada no meio conta como derrota
   if (App.kind === 'ranked' && App.G && !App.ended && !App.recorded) recordMatch(false, true);
   App.running = false; App.G = null; App.me = null;
@@ -261,7 +270,7 @@ function renderRoom() {
   renderQueue();
   $('#rmap').innerHTML = mapCards(App.role === 'host');
   if (App.role === 'host') $('#rmap').querySelectorAll('[data-map]').forEach(d => d.onclick = () => { App.mapSel = d.dataset.map; try { localStorage.setItem('ruptura-fps-map', App.mapSel); } catch (e) { } syncRoom(); });
-  $('#rpick').innerHTML = FPS_HUNTER_IDS.map(h => `<button class="rh${App.hunter === h ? ' on' : ''}" data-h="${h}" style="--c:${CLASSES[HUNTERS[h].classe].cor}">${HUNTERS[h].nome}<small>${CLASSES[HUNTERS[h].classe].nome}</small></button>`).join('');
+  $('#rpick').innerHTML = HUNTERS_BY_ROLE.map(h => `<button class="rh${App.hunter === h ? ' on' : ''}" data-h="${h}" style="--c:${CLASSES[HUNTERS[h].classe].cor}">${HUNTERS[h].nome}<small>${CLASSES[HUNTERS[h].classe].nome}</small></button>`).join('');
   $('#rpick').querySelectorAll('.rh').forEach(b => b.onclick = () => {
     App.hunter = b.dataset.h; try { localStorage.setItem('ruptura-fps-h', App.hunter); } catch (e) { }
     if (App.role === 'host') { const sl = App.slots.find(x => x.pid === 'host'); if (sl) sl.hunter = App.hunter; syncRoom(); }
@@ -612,11 +621,12 @@ function boardHTML() {
 function renderBoard() { $('#board').innerHTML = boardHTML(); }
 
 // ---------------- HUD ----------------
-const hud = $('#hud2d'), hx = hud.getContext('2d');
+const hud = $('#hud2d'); let hx = hud.getContext('2d');
 function drawHud(dt) {
   const G = App.G, me = App.me, W = innerWidth, H = innerHeight;
   if (hud.width !== W || hud.height !== H) { hud.width = W; hud.height = H; }
   hx.clearRect(0, 0, W, H);
+  if (FS.showFps) { hx.font = '700 13px Rajdhani, sans-serif'; hx.textAlign = 'right'; hx.fillStyle = App.fps >= 55 ? '#7dffa0' : App.fps >= 40 ? '#ffd65a' : '#ff6a6a'; hx.fillText(`${Math.round(App.fps)} FPS · ${Math.round(App.rs * 100)}%`, W - 12, H - 10); }
   const Wc = G.curW(me);
   // luneta
   if (me.alive && Wc && Wc.zoom && me.zoom) {
@@ -656,14 +666,30 @@ function drawHud(dt) {
 }
 function minimap() {
   const G = App.G, me = App.me, M = G.M, s = Math.min(5, 230 / M.W), ox = 14, oy = 14, w = M.W * s, h = M.H * s;
-  hx.save(); hx.globalAlpha = 0.9; hx.fillStyle = 'rgba(10,12,20,.75)'; hx.fillRect(ox - 4, oy - 4, w + 8, h + 8);
+  hx.save(); hx.globalAlpha = 0.9;
+  // o fundo do minimapa só é redesenhado quando muda (portas, madeira quebrada)
+  const key = M.W + ':' + s + ':' + G.M.doors.map(d => d.open ? 1 : 0).join('') + ':' + G.M.breakables.map(b => b.hp > 0 ? 1 : 0).join('');
+  if (!App.mmC || App.mmKey !== key || App.mmM !== M) {
+    App.mmKey = key; App.mmM = M;
+    const cv = App.mmC = App.mmC || document.createElement('canvas'); cv.width = w + 8; cv.height = h + 8;
+    const real = hx; hx = cv.getContext('2d'); hx.clearRect(0, 0, cv.width, cv.height);
+    minimapBase(M, s, 4, 4, w, h);
+    hx = real;
+  }
+  hx.drawImage(App.mmC, ox - 4, oy - 4);
+  hx.font = '700 14px Rajdhani, sans-serif'; hx.textAlign = 'center'; hx.fillStyle = '#fff';
+  for (const k of M.siteIds) { const S = M.sites[k]; hx.fillText(k, ox + S.x / M.cell * s, oy + S.z / M.cell * s + 5); }
+  minimapDyn(G, me, M, s, ox, oy, w, h);
+}
+function minimapBase(M, s, ox, oy, w, h) {
+  hx.fillStyle = 'rgba(10,12,20,.75)'; hx.fillRect(ox - 4, oy - 4, w + 8, h + 8);
   for (let r = 0; r < M.H; r++) for (let c = 0; c < M.W; c++) {
     const ch = M.at(c, r); if (ch === '#') continue;
     hx.fillStyle = { A: '#8a6040', B: '#406080', C: '#4a7a40', x: '#555', h: '#555', o: '#05070d', w: '#2c6a80', i: '#c8dfee', g: '#3a6a2a', P: '#a070ff', Q: '#50e0ff', L: '#ffd060' }[ch] || (ch === '=' ? (M.doorAt(c, r) ? '#e0a030' : '#9a968c') : ch === 'b' ? (M.breakAt(c, r) ? '#a0703a' : '#9a968c') : '#9a968c');
     hx.fillRect(ox + c * s, oy + r * s, s, s);
   }
-  hx.font = '700 14px Rajdhani, sans-serif'; hx.textAlign = 'center'; hx.fillStyle = '#fff';
-  for (const k of M.siteIds) { const S = M.sites[k]; hx.fillText(k, ox + S.x / M.cell * s, oy + S.z / M.cell * s + 5); }
+}
+function minimapDyn(G, me, M, s, ox, oy, w, h) {
   const P = (x, z) => [ox + x / M.cell * s, oy + z / M.cell * s];
   if (G.nucleo) { const [x, y] = P(G.nucleo.x, G.nucleo.z); hx.fillStyle = G.nucleo.planted ? '#ff5a5a' : '#7ff5ff'; hx.fillRect(x - 3, y - 3, 6, 6); }
   for (const p of G.players) {
@@ -724,13 +750,33 @@ function updateDom(dt) {
 }
 
 // ---------------- laço ----------------
+// ---------------- desempenho: resolução automática para segurar 60 FPS ----------------
+// Mede o FPS a cada meio segundo. Se cair, baixa um pouco a resolução interna; quando sobra folga, volta a subir.
+App.rs = FS.scale; App.fps = 60;
+const PERF = { n: 0, t0: 0, good: 0, hold: 0 };
+function perfTick(now) {
+  if (!PERF.t0) PERF.t0 = now;
+  PERF.n++;
+  const el = now - PERF.t0; if (el < 500) return;
+  App.fps = PERF.n * 1000 / el; PERF.n = 0; PERF.t0 = now;
+  if (document.hidden || el > 2000) return;
+  const minRS = HQ ? 0.6 : 0.5;
+  if (!FS.autoRes) { App.rs = FS.scale; return; }
+  App.rs = Math.min(App.rs, FS.scale);
+  PERF.hold = Math.max(0, PERF.hold - el / 1000);
+  if (App.fps < 54 && App.rs > minRS) { App.rs = Math.max(minRS, +(App.rs - 0.08).toFixed(2)); PERF.good = 0; PERF.hold = PERF.raised ? 20 : 2; PERF.raised = false; }
+  else if (App.fps >= 58) {
+    PERF.good += el / 1000;
+    if (PERF.good > 4 && PERF.hold <= 0 && App.rs < FS.scale) { App.rs = Math.min(FS.scale, +(App.rs + 0.05).toFixed(2)); PERF.good = 0; PERF.raised = true; }
+  } else PERF.good = 0;
+}
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - (App.last || now)) / 1000); App.last = now;
-  gl.resize(FS.scale);
+  perfTick(now); gl.resize(App.rs);
   if (!App.G) { // fundo do menu: câmera girando
     const T = now / 1000, cx = App.M.W, cz = App.M.H, cam = { x: cx + Math.sin(T * 0.08) * cx * 0.5, y: 11, z: cz + Math.cos(T * 0.08) * cz * 0.45, yaw: T * 0.08 + Math.PI, pitch: -0.42, fov: 1.25 };
-    gl.begin(cam, T); gl.draw(App.mapMesh); for (const l of App.lamps) gl.box(l.x, l.y, l.z, 0.14, 0.2, 0.14, l.col, { emis: 1, cast: false }); gl.flush(); return;
+    gl.begin(cam, T); gl.draw(App.mapMesh, null, { stat: true }); for (const l of App.lamps) gl.box(l.x, l.y, l.z, 0.14, 0.2, 0.14, l.col, { emis: 1, cast: false }); gl.flush(); return;
   }
   const G = App.G, me = App.me;
   if (App.running) { readInput(); simPump(now); }
@@ -752,13 +798,30 @@ requestAnimationFrame(frame);
 
 // ---------------- configurações ----------------
 function bindSettings(s) {
-  s.innerHTML = `<label>Sensibilidade <input type="range" min="0.05" max="1.5" step="0.01" value="${FS.sens}" data-k="sens"><b>${FS.sens}</b></label>
+  const pct = v => Math.round(v * 100) + '%';
+  s.innerHTML = `<div class="qual"><span>Gráficos</span><button data-q="alta" class="${HQ ? 'on' : ''}">Alta qualidade</button><button data-q="desempenho" class="${HQ ? '' : 'on'}">Desempenho</button></div>
+  <small class="qhint">${HQ ? 'Sombras suaves, texturas detalhadas e antisserrilhado.' : 'Mais leve: sombra e textura simplificadas, sem antisserrilhado. Quase o mesmo visual.'}</small>
+  <label>Sensibilidade <input type="range" min="0.05" max="1.5" step="0.01" value="${FS.sens}" data-k="sens"><b>${FS.sens}</b></label>
   <label>Campo de visão <input type="range" min="80" max="115" step="1" value="${FS.fov}" data-k="fov"><b>${FS.fov}°</b></label>
-  <label>Resolução <input type="range" min="0.5" max="1" step="0.05" value="${FS.scale}" data-k="scale"><b>${Math.round(FS.scale * 100)}%</b></label>
+  <label>Resolução <input type="range" min="0.5" max="1" step="0.05" value="${FS.scale}" data-k="scale"><b>${pct(FS.scale)}</b></label>
+  <label>Resolução automática (segura 60 FPS) <input type="checkbox" data-k="autoRes" ${FS.autoRes ? 'checked' : ''}></label>
+  <label>Sombras <input type="checkbox" data-k="shadows" ${FS.shadows ? 'checked' : ''}></label>
+  <label>Mostrar FPS <input type="checkbox" data-k="showFps" ${FS.showFps ? 'checked' : ''}></label>
   <label>Volume <input type="range" min="0" max="100" step="1" value="${FS.vol}" data-k="vol"><b>${FS.vol}</b></label>
-  <label>Cor da mira <input type="color" value="${FS.xcol}" data-k="xcol"></label>
-  <label>Sombras <input type="range" min="0" max="1" step="1" value="${FS.shadows}" data-k="shadows"><b>${FS.shadows ? 'ligadas' : 'desligadas'}</b></label>`;
-  s.querySelectorAll('input').forEach(i => i.oninput = () => { FS[i.dataset.k] = i.type === 'color' ? i.value : +i.value; saveFS(); const b = i.nextElementSibling; if (b) gl.shadows = !!FS.shadows; b.textContent = i.dataset.k === 'shadows' ? (FS.shadows ? 'ligadas' : 'desligadas') : i.dataset.k === 'scale' ? Math.round(FS.scale * 100) + '%' : i.dataset.k === 'fov' ? FS.fov + '°' : FS[i.dataset.k]; });
+  <label>Cor da mira <input type="color" value="${FS.xcol}" data-k="xcol"></label>`;
+  s.querySelectorAll('input').forEach(i => i.oninput = () => {
+    const k = i.dataset.k;
+    FS[k] = i.type === 'color' ? i.value : i.type === 'checkbox' ? (i.checked ? 1 : 0) : +i.value; saveFS();
+    gl.shadows = !!FS.shadows; if (k === 'scale') App.rs = FS.scale;
+    const b = i.nextElementSibling; if (b) b.textContent = k === 'scale' ? pct(FS.scale) : k === 'fov' ? FS.fov + '°' : FS[k];
+    for (const o of document.querySelectorAll(`[data-k="${k}"]`)) if (o !== i) { if (o.type === 'checkbox') o.checked = !!FS[k]; else o.value = FS[k]; }
+  });
+  s.querySelectorAll('[data-q]').forEach(b => b.onclick = () => {
+    if (b.dataset.q === FS.quality || (b.dataset.q === 'alta' && HQ)) return;
+    FS.quality = b.dataset.q; saveFS();
+    if (!App.G) location.reload(); // trocar a qualidade recria o motor gráfico
+    else s.querySelector('.qhint').textContent = 'Vale quando a partida acabar (a página recarrega).';
+  });
 }
 bindSettings($('#fpset')); bindSettings($('#fpset2'));
 buildMenu(); buildMaps();

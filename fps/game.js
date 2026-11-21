@@ -611,7 +611,7 @@ const ABILITY = {
   serra: {
     c(G, p) { p.steadyT = 5; G.emit({ k: 'buff', id: p.id }); },
     q(G, p) { const I = p.in, m = [I.mx, I.mz]; I.mx = -I.mx || 0; I.mz = I.mz ? -I.mz : -1; dashMove(G, p, 16, 0.22); [I.mx, I.mz] = m; },
-    e(G, p) { G.throwG(p, 'flare', 20, { onLand: true }); },
+    e(G, p) { const [x, , z] = G.aimPoint(p, 12); G.zones.push({ kind: 'alarm', x, z, r: 4.5, t: 100, T: 100, alarm: true, team: p.team, owner: p.id }); G.emit({ k: 'barrier', x, z }); },
     x(G, p) { if (!p.guns[1] && !p.guns[2]) return false; p.pierceN = 3; G.emit({ k: 'buff', id: p.id }); },
   },
   fera: {
@@ -627,7 +627,7 @@ const ABILITY = {
     x(G, p) { const [x, , z] = G.aimPoint(p, 40); G.zones.push({ kind: 'vortex', x, z, r: 8, t: 5, T: 5, slow: 0.4, dps: 10, pull: true, team: p.team, owner: p.id }); G.emit({ k: 'boom', x, y: 1, z, r: 8, kind: 'sand' }); },
   },
   elo: {
-    c(G, p) { const t = aimAlly(G, p, 20); if (t.hp >= 100) return false; t.healT = Math.max(t.healT, 60); G.emit({ k: 'heal', id: t.id, by: p.id }); },
+    c(G, p) { G.throwG(p, 'slowOrb', 14, { onLand: true }); },
     q(G, p) { let n = 0; for (const q of G.players) if (q.alive && q.team === p.team && Math.hypot(q.x - p.x, q.z - p.z) < 10) { q.hp = Math.min(100, q.hp + 35); n++; } G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 10, kind: 'heal' }); },
     e(G, p) { const t = aimAlly(G, p, 20); if (t.armor >= 50) return false; t.armor = Math.min(100, t.armor + 30); G.emit({ k: 'shieldUp', id: t.id }); },
     x(G, p) { for (const q of G.players) if (q.alive && q.team === p.team && Math.hypot(q.x - p.x, q.z - p.z) < 20) q.saveT = 10; G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 20, kind: 'heal' }); },
@@ -659,11 +659,11 @@ const ABILITY = {
   teia: {
     c(G, p) { const [x, , z] = G.aimPoint(p, 6); G.zones.push({ kind: 'web', x, z, r: 2.4, t: 90, T: 90, alarm: true, team: p.team, owner: p.id }); G.emit({ k: 'barrier', x, z }); },
     q(G, p) { G.throwG(p, 'cocoon', 14, { onLand: true }); },
-    e(G, p) { const [x, , z, t] = G.aimPoint(p, 38); G.grenades.push({ kind: 'smoke', owner: p.id, team: p.team, x, y: 1.6, z, vx: 0, vy: 0, vz: 0, fuse: Math.min(1, t / 40 + 0.2), grav: 0, dur: 14, col: 4 }); },
+    e(G, p) { G.zones.push({ kind: 'web', x: p.x, z: p.z, r: 3.6, t: 100, T: 100, alarm: true, team: p.team, owner: p.id }); G.emit({ k: 'barrier', x: p.x, z: p.z }); },
     x(G, p) { const [x, , z] = G.aimPoint(p, 40); G.zones.push({ kind: 'bigweb', x, z, r: 9, t: 8, T: 8, slow: 0.55, reveal: true, team: p.team, owner: p.id }); G.emit({ k: 'splash', x, z, big: 1 }); },
   },
   brisa: {
-    c(G, p) { for (const q of G.players) if (q.alive && q.team === p.team && Math.hypot(q.x - p.x, q.z - p.z) < 10) q.spdT = 5; G.emit({ k: 'buff', id: p.id }); },
+    c(G, p) { const [x, , z] = G.aimPoint(p, 12); G.zones.push({ kind: 'alarm', x, z, r: 4, t: 100, T: 100, alarm: true, team: p.team, owner: p.id }); G.emit({ k: 'barrier', x, z }); },
     q(G, p) { for (const q of frontEnemies(G, p, 9, 0.5)) { G.hurt(q, 15, p, 'body', 'rajada'); const a = Math.atan2(q.x - p.x, q.z - p.z); q.vx = Math.sin(a) * 13; q.vz = Math.cos(a) * 13; q.vy = 3; q.onGround = false; q.dashT = 0.3; } G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 4, kind: 'wind' }); },
     e(G, p) { const t = aimAlly(G, p, 20); if (t.hp >= 100) return false; t.healT = Math.max(t.healT, 50); G.emit({ k: 'heal', id: t.id, by: p.id }); },
     x(G, p) { G.zones.push({ kind: 'eye', x: p.x, z: p.z, r: 8, t: 8, T: 8, ward: true, team: p.team, owner: p.id }); G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 8, kind: 'wind' }); },
@@ -671,7 +671,7 @@ const ABILITY = {
   egide: {
     c(G, p) { wallAhead(G, p, 5, 1.2, 3.6, 10, 'shield', 2.6); },
     q(G, p) { for (const q of frontEnemies(G, p, 12, 0.55)) { q.revealT = Math.max(q.revealT, 4); q.slowT = Math.max(q.slowT, 3); q.slowAmt = Math.max(q.slowAmt, 0.4); } G.emit({ k: 'roar', x: p.x, z: p.z }); },
-    e(G, p) { for (const q of frontEnemies(G, p, 3.2, 0.4)) { q.stunT = Math.max(q.stunT, 1); const a = Math.atan2(q.x - p.x, q.z - p.z); q.vx = Math.sin(a) * 11; q.vz = Math.cos(a) * 11; q.dashT = 0.25; G.hurt(q, 20, p, 'body', 'escudo'); } G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 2, kind: 'stone' }); },
+    e(G, p) { const [x, , z, t] = G.aimPoint(p, 38); G.grenades.push({ kind: 'smoke', owner: p.id, team: p.team, x, y: 1.6, z, vx: 0, vy: 0, vz: 0, fuse: Math.min(1, t / 40 + 0.2), grav: 0, dur: 15, col: 6 }); },
     x(G, p) { for (const q of G.players) if (q.alive && q.team === p.team && Math.hypot(q.x - p.x, q.z - p.z) < 15) { q.armor = Math.min(100, q.armor + 50); q.wardT = 6; } G.emit({ k: 'boom', x: p.x, y: 1, z: p.z, r: 15, kind: 'heal' }); },
   },
   lamina: {
@@ -768,12 +768,7 @@ const ABILITY = {
       G.emit({ k: 'barrier', x: cx, z: cz });
     },
     q(G, p) { G.throwG(p, 'slowOrb', 14, { onLand: true }); },
-    e(G, p) {
-      const d = fwdVec(p.yaw, p.pitch), h = G.trace(p.x, G.eye(p), p.z, d[0], d[1], d[2], 15, p);
-      const t = h.p && h.p.team === p.team ? h.p : p;
-      if (t.hp >= 100) return false;
-      t.healT = 60; G.emit({ k: 'heal', id: t.id, by: p.id });
-    },
+    e(G, p) { const [x, , z, t] = G.aimPoint(p, 38); G.grenades.push({ kind: 'smoke', owner: p.id, team: p.team, x, y: 1.6, z, vx: 0, vy: 0, vz: 0, fuse: Math.min(1, t / 40 + 0.2), grav: 0, dur: 15, col: 5 }); },
     x(G, p) {
       let best = null, bd = 1e9; const [ax, , az] = G.aimPoint(p, 25);
       for (const q of G.players) if (!q.alive && q.team === p.team && q.body) { const d = Math.hypot(q.body.x - ax, q.body.z - az); if (d < bd && Math.hypot(q.body.x - p.x, q.body.z - p.z) < 25) { bd = d; best = q; } }
@@ -807,6 +802,7 @@ function botThink(G, p, dt) {
   // compra
   if (G.phase === 'buy') {
     if (!B.bought && G.phaseT < RULES.buyTime - 1.5 - Math.random()) { botBuy(G, p); B.bought = true; }
+    B.trap = false;
     I.yaw = p.yaw; I.pitch = 0; return;
   }
   B.bought = false;
@@ -859,6 +855,9 @@ function botThink(G, p, dt) {
     // sem munição -> troca
     const G2 = p.guns[p.cur]; if (G2 && G2.ammo === 0 && G2.res === 0) I.slot = p.cur === 1 ? 2 : 3;
   } else {
+    // guardiões na defesa deixam a vigia/armadilha no caminho do ataque
+    const tk = GUARD_TRAP[p.hunter];
+    if (tk && !atk && G.phase === 'live' && !B.trap && G.phaseT < RULES.roundTime - 7) { if (tk === 'e' || p.ab[tk] > 0) I.ab = tk; B.trap = true; }
     // sem alvo: olhar para onde anda / alerta
     if (B.alert && G.t - B.alert.t < 3) { const a = Math.atan2(B.alert.x - p.x, -(B.alert.z - p.z)); I.yaw = p.yaw + clamp(angWrap(a - p.yaw), -5 * dt, 5 * dt); }
     I.pitch = p.pitch * 0.9;
@@ -937,17 +936,18 @@ function planBot(G, p, B) {
     B.goalT = G.t + 999;
   }
 }
+const GUARD_TRAP = { sino: 'c', teia: 'e', serra: 'e', brisa: 'c' };
 function botAbility(G, p, T, d) {
   const I = p.in; const k = Math.random() < 0.5 ? 'e' : (Math.random() < 0.5 ? 'q' : 'c');
   if (k !== 'e' && p.ab[k] <= 0) return;
-  if (p.hunter === 'lumi' && k === 'e') return;
   if (p.hunter === 'mare' && k === 'c') return;
   if (p.hunter === 'brasa' && k === 'q') return;
   if (p.hunter === 'corvo' && k === 'e') return;
   if (p.hunter === 'lamina' && k !== 'e') return;
   if (p.hunter === 'sino' && k === 'e') return;
   if (p.hunter === 'ancora' && k === 'e') return;
-  if (['elo', 'brisa'].includes(p.hunter) && k !== 'q') return;
+  if (p.hunter === 'elo' && k === 'e') return;
+  if (p.hunter === 'brisa' && k === 'e') return;
   if (['serra', 'fera'].includes(p.hunter) && k === 'q') return;
   if (['duna', 'egide'].includes(p.hunter) && k === 'c') return;
   if (p.hunter === 'bisao' && k === 'c' && d > 16) return;
