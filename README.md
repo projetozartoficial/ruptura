@@ -4,7 +4,7 @@
 
 Jogo de tiro tático 5v5 de navegador, gratuito, com contas Google, amigos, Ranqueada e partidas online (bots completam as vagas vazias).
 
-**Jogar:** https://wasmorf.github.io/Ruptura/
+**Jogar:** https://projetozartoficial.github.io/ruptura/
 
 ## Como funciona
 FPS tático em primeira pessoa, 5 contra 5.
@@ -68,7 +68,7 @@ Só joga quem conectar a conta Google.
 1. Crie um projeto em https://console.firebase.google.com.
 2. Configurações do projeto → Seus apps → Web (`</>`) → copie o `firebaseConfig` para `js/firebase-config.js`.
 3. **Authentication** → Método de login → ative **Google**.
-4. **Authentication** → Configurações → Domínios autorizados → adicione o domínio do site (ex.: `wasmorf.github.io`).
+4. **Authentication** → Configurações → Domínios autorizados → adicione o domínio do site (ex.: `projetozartoficial.github.io`).
 5. **Firestore Database** → criar banco → aba **Regras** → cole o conteúdo de `firestore.rules`.
 
 O multiplayer é P2P (WebRTC): quem cria a sala roda a partida, e a conexão entre os jogadores é combinada pelo Firestore.

@@ -7,7 +7,7 @@
 //     > registre o app e copie o objeto firebaseConfig para baixo.
 //  3. Authentication > Método de login > ative "Google".
 //  4. Authentication > Configurações > Domínios autorizados >
-//     adicione  wasmorf.github.io
+//     adicione  projetozartoficial.github.io
 //  5. Firestore Database > Criar banco de dados (modo produção) e cole as
 //     regras do arquivo firestore.rules (aba "Regras").
 //
