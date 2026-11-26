@@ -37,3 +37,7 @@ window.FIREBASE_CONFIG = {
 // Nível de conta mínimo para a Ranqueada (o padrão do jogo é 15).
 // Pode baixar temporariamente para testar.
 window.RANKED_MIN_LEVEL = 15;
+
+// Versão dos Termos de Uso e da Política de Privacidade. Ao mudar os textos de forma
+// importante, troque a data: todos precisam aceitar de novo ao entrar.
+window.TERMS_VERSION = '2026-11-25';

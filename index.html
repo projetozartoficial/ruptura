@@ -3,34 +3,51 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ruptura · Caçadores do Abismo</title>
-<meta name="description" content="Ruptura: FPS tático 5v5 no navegador. 20 caçadores, 7 mapas, Núcleo, economia e Ranqueada.">
-<link rel="icon" href="logo.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="fps/fps.css?v=5">
+<title>Ruptura · Zart Jogos</title>
+<meta name="description" content="Ruptura, da Zart Jogos: jogo de tiro tático 5 contra 5, gratuito, no navegador. 20 caçadores, 7 mapas e Ranqueada.">
+<meta name="theme-color" content="#0b1440">
+<link rel="icon" type="image/png" href="zart/zart-icon.png">
+<link rel="stylesheet" href="fps/fps.css?v=7">
 </head>
 <body>
-<canvas id="cv"></canvas>
-<div class="vig"></div>
-<canvas id="hud2d"></canvas>
+<a class="skip" href="#conteudo">Pular para o conteúdo</a>
+<div id="sr-live" class="sr-only" aria-live="polite" role="status"></div>
+<canvas id="cv" aria-hidden="true"></canvas>
+<div class="vig" aria-hidden="true"></div>
+<canvas id="hud2d" aria-hidden="true"></canvas>
 
 <div id="menu" class="menu">
   <div class="mbox">
-    <div class="mhead"><img src="logo.png" alt="" width="64" height="64"><div><h1>RUPTURA</h1><div class="sub">Caçadores do Abismo · FPS tático 5v5</div></div>
-      <div id="acct" class="acctbar"></div></div>
+    <header class="zhead"><a class="zbrand" href="#conteudo" aria-label="Zart Jogos"><img src="zart/zart-logo.png" alt="ZART" width="62" height="30"><span class="zsub">Jogos</span></a><div id="acct" class="acctbar"></div></header>
+    <main id="conteudo" tabindex="-1">
+    <div class="mhead"><img src="logo.png" alt="" width="64" height="64"><div><h1>RUPTURA</h1><p class="sub">Caçadores do Abismo · tiro tático 5 contra 5</p></div></div>
     <div class="mplay">
-      <div class="online"><button class="btn rk big" id="btn-ranked">Ranqueada</button><button class="btn gold big" id="btn-play">Jogar contra bots</button><button class="btn big" id="btn-host">Criar sala</button><input id="in-code" maxlength="6" placeholder="CÓDIGO" autocomplete="off"><button class="btn big" id="btn-join">Entrar</button></div>
-      <div class="acct" id="acctmsg"></div>
+      <div class="online"><button class="btn rk big" id="btn-ranked">Ranqueada</button><button class="btn gold big" id="btn-play">Jogar contra bots</button><button class="btn big" id="btn-host">Criar sala</button><input id="in-code" maxlength="6" placeholder="CÓDIGO" autocomplete="off" aria-label="Código da sala para entrar"><button class="btn big" id="btn-join">Entrar</button></div>
+      <div class="acct" id="acctmsg" role="status" aria-live="polite"></div>
     </div>
     <div class="rules"><b>Como funciona:</b> 5 contra 5 (bots completam). O ataque leva o <b>Núcleo</b> até o Site A ou B e planta (segure F). A defesa impede ou desarma. Vence quem fizer <b>7 rounds</b>; troca de lado depois do round 6 (6×6 vai pra prorrogação, precisa abrir 2).
       <br>Créditos: começo ◈800 · vitória ◈3000 · derrota ◈1900/2400/2900 · abate ◈200 · plantar ◈300 pro time.</div>
-    <h3>Mapa <small>(partidas contra bots e salas)</small></h3>
+    <h2 class="h3">Mapa <small>(partidas contra bots e salas)</small></h2>
     <div id="mpick" class="mpick"></div>
-    <h3>Escolha seu caçador</h3>
+    <h2 class="h3">Escolha seu caçador</h2>
     <div id="pick" class="pick"></div>
     <div class="mfoot"><div class="keys">WASD andar · Shift andar devagar · Ctrl agachar · Espaço pular · Mouse mirar/atirar · Botão direito: luneta · R recarregar · 1/2/3 armas · B loja · F plantar/desarmar/pegar · C Q E X habilidades · G largar arma · Tab placar · Esc pausa</div></div>
     <details class="setbox"><summary>Configurações</summary><div id="fpset" class="fpset"></div></details>
+    </main>
+    <footer class="zfoot">
+      <img src="zart/zart-logo.png" alt="ZART" width="72" height="35" class="zfoot-logo">
+      <p><b>Ruptura, da Zart Jogos.</b> Um projeto do grupo Zart.</p>
+      <nav aria-label="Links do rodapé" class="zlinks">
+        <button class="lnk" data-page="sobre">Sobre o Grupo Zart</button>
+        <button class="lnk" data-page="termos">Termos de Uso</button>
+        <button class="lnk" data-page="privacidade">Política de Privacidade</button>
+        <button class="lnk" data-page="cookies">Cookies e armazenamento</button>
+        <button class="lnk" data-page="reembolso">Política de Reembolso</button>
+        <button class="lnk" data-act="consent">Preferências de privacidade</button>
+      </nav>
+      <p>Responsável: <b>Grupo Zart</b> · Contato: <a href="mailto:projetozart@gmail.com">projetozart@gmail.com</a></p>
+      <p class="zmut">Jogo gratuito. Não vende nada e não usa anúncios nem rastreamento.</p>
+    </footer>
   </div>
 </div>
 
@@ -51,28 +68,41 @@
   <div id="buy" class="buy"></div>
   <div id="board" class="board"></div>
 </div>
-<div id="room" class="room"><div class="rbox">
-  <div class="rhead"><div><small id="rkind">SALA PERSONALIZADA</small><b id="rcode"></b></div><button class="btn" id="btn-rcopy">Copiar</button><button class="btn ghost" id="btn-rhide" title="Esconder o código (para live)">👁</button><span class="sp"></span><button class="btn" id="btn-rleave">Sair</button></div>
+<div id="room" class="room" role="region" aria-label="Sala"><div class="rbox">
+  <div class="rhead"><div><small id="rkind">SALA PERSONALIZADA</small><b id="rcode"></b></div><button class="btn" id="btn-rcopy">Copiar</button><button class="btn ghost" id="btn-rhide" title="Esconder o código (para live)" aria-label="Esconder ou mostrar o código da sala">👁</button><span class="sp"></span><button class="btn" id="btn-rleave">Sair</button></div>
   <div class="rteams"><div class="rt" id="rt0"></div><div class="rvs">VS</div><div class="rt" id="rt1"></div></div>
   <div id="rq" class="rq"></div>
-  <div id="rmapbox"><h4>Mapa (o dono da sala escolhe)</h4><div id="rmap" class="mpick small"></div></div>
-  <h4>Seu caçador</h4><div id="rpick" class="rpick"></div>
-  <div class="rfoot"><span id="rmsg"></span><button class="btn gold big" id="btn-rstart">Começar partida</button></div>
+  <div id="rmapbox"><h2 class="h4">Mapa (o dono da sala escolhe)</h2><div id="rmap" class="mpick small"></div></div>
+  <h2 class="h4">Seu caçador</h2><div id="rpick" class="rpick"></div>
+  <div class="rfoot"><span id="rmsg" role="status" aria-live="polite"></span><button class="btn gold big" id="btn-rstart">Começar partida</button></div>
 </div></div>
-<div id="pause" class="pause"><div class="pbox"><h2>Pausa</h2><button class="btn gold" id="btn-resume">Continuar</button><button class="btn" id="btn-quit">Sair da partida</button><details class="setbox" open><summary>Configurações</summary><div class="fpset" id="fpset2"></div></details></div></div>
-<div id="end" class="end"></div>
+<div id="pause" class="pause" role="dialog" aria-modal="true" aria-labelledby="pause-t"><div class="pbox"><h2 id="pause-t">Pausa</h2><button class="btn gold" id="btn-resume">Continuar</button><button class="btn" id="btn-quit">Sair da partida</button><details class="setbox" open><summary>Configurações</summary><div class="fpset" id="fpset2"></div></details></div></div>
+<div id="end" class="end" role="dialog" aria-modal="true" aria-label="Fim da partida"></div>
 <div id="gate"></div>
-<div id="side" class="side"></div>
-<div id="invites" class="invites"></div>
-<div id="nick" class="modal"><div class="mdbox">
-  <h2>Escolha seu ID</h2>
-  <p>É assim que seus amigos vão te achar. O nome tem de 3 a 14 caracteres; a TAG, de 3 a 5 letras ou números.</p>
-  <div class="nickrow"><input id="nk-name" maxlength="14" placeholder="Nome" autocomplete="off"><span>#</span><input id="nk-tag" maxlength="5" placeholder="TAG" autocomplete="off"></div>
-  <div class="mdmsg" id="nk-msg"></div>
-  <div class="row"><button class="btn ghost" id="nk-cancel">Cancelar</button><button class="btn gold" id="nk-ok">Confirmar</button></div>
+<aside id="side" class="side" aria-label="Painel da conta"></aside>
+<div id="invites" class="invites" aria-live="polite"></div>
+<div id="nick" class="modal" role="dialog" aria-modal="true" aria-labelledby="nk-title"><form class="mdbox" id="nk-form" novalidate>
+  <h2 id="nk-title">Escolha seu ID</h2>
+  <p>É assim que seus amigos vão te achar. O nome tem de 3 a 14 caracteres; a TAG, de 3 a 5 letras ou números. Não use seu nome completo nem dados pessoais.</p>
+  <div class="nickrow"><label class="sr-only" for="nk-name">Nome do ID</label><input id="nk-name" maxlength="14" placeholder="Nome" autocomplete="off" aria-describedby="nk-uso"><span aria-hidden="true">#</span><label class="sr-only" for="nk-tag">TAG do ID</label><input id="nk-tag" maxlength="5" placeholder="TAG" autocomplete="off" aria-describedby="nk-uso"></div>
+  <p class="zmut small" id="nk-uso">Uso: seu ID, nível e ranque aparecem para outros jogadores nas partidas e na lista de amigos. Saiba mais na <button type="button" class="lnk" data-page="privacidade">Política de Privacidade</button>.</p>
+  <label class="chk" id="nk-conslbl"><input type="checkbox" id="nk-cons"> Entendo e concordo que meu ID, nível e ranque fiquem visíveis para outros jogadores.</label>
+  <div class="mdmsg" id="nk-msg" role="alert"></div>
+  <div class="row"><button type="button" class="btn ghost" id="nk-cancel">Cancelar</button><button type="submit" class="btn gold" id="nk-ok">Confirmar</button></div>
+</form></div>
+<div id="login" class="modal" role="dialog" aria-modal="true" aria-labelledby="lg-title"><form class="mdbox" id="lg-form" novalidate>
+  <h2 id="lg-title">Entrar no Ruptura</h2>
+  <p id="lg-uso">Usamos sua conta Google só para identificar você e salvar seu progresso (nível, ranque, amigos). O jogo não usa nem mostra seu e-mail, nome ou foto do Google.</p>
+  <label class="chk"><input type="checkbox" id="lg-cons" aria-describedby="lg-uso"> <span>Li e concordo com os <button type="button" class="lnk" data-page="termos">Termos de Uso</button> e a <button type="button" class="lnk" data-page="privacidade">Política de Privacidade</button>. Tenho 13 anos ou mais e, se tenho menos de 18, autorização dos meus responsáveis.</span></label>
+  <div class="mdmsg" id="lg-msg" role="alert"></div>
+  <div class="row"><button type="button" class="btn ghost" id="lg-cancel">Cancelar</button><button type="submit" class="btn gold" id="lg-ok">Entrar com Google</button></div>
+</form></div>
+<div id="zpage" class="zpage" role="dialog" aria-modal="true" aria-labelledby="zpage-t" aria-hidden="true"><div class="zpbox">
+  <div class="zphead"><h2 id="zpage-t"></h2><button class="btn ghost zclose" aria-label="Fechar">✕ Fechar</button></div>
+  <div class="zpbody" id="zpage-b"></div>
 </div></div>
 
-<script src="js/data.js?v=20"></script>
+<script src="js/data.js?v=21"></script>
 <script src="fps/engine.js?v=5"></script>
 <script src="fps/weapons.js?v=1"></script>
 <script src="fps/data.js?v=5"></script>
@@ -81,10 +111,11 @@
 <script src="fps/game.js?v=6"></script>
 <script src="js/net.js?v=19"></script>
 <script src="fps/net.js?v=2"></script>
-<script src="js/firebase-config.js?v=18"></script>
-<script src="js/account.js?v=19"></script>
+<script src="js/firebase-config.js?v=19"></script>
+<script src="js/account.js?v=20"></script>
 <script src="fps/render.js?v=3"></script>
-<script src="fps/main.js?v=8"></script>
-<script src="fps/social.js?v=1"></script>
+<script src="fps/main.js?v=9"></script>
+<script src="fps/legal.js?v=1"></script>
+<script src="fps/social.js?v=2"></script>
 </body>
 </html>

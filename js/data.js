@@ -29,7 +29,7 @@ const LORE = { mundo: "Há trezentos anos o céu se partiu. A Ruptura rasgou o m
 const CLASSES = {
   desafiante: { nome: 'Desafiante', cor: '#ff6a3d', icone: '⚔', desc: 'Abre espaço: puxa a entrada no site e vence os duelos diretos.' },
   dominador:  { nome: 'Dominador',  cor: '#2fd6c5', icone: '◎', desc: 'Corta a visão com cortinas e barreiras e dita o ritmo das entradas e retomadas.' },
-  batedor:    { nome: 'Batedor',    cor: '#b46bff', icone: '➶', desc: 'Revela posições, atordoa e cega os inimigos e prepara o terreno para o time.' },
+  batedor:    { nome: 'Batedor',    cor: '#c58bff', icone: '➶', desc: 'Revela posições, atordoa e cega os inimigos e prepara o terreno para o time.' },
   guardiao:   { nome: 'Guardião',   cor: '#ffd65a', icone: '⛨', desc: 'Protege áreas, vigia os flancos e atrasa o avanço do inimigo.' },
 };
 

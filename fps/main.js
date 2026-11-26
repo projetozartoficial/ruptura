@@ -40,13 +40,14 @@ loadMap(FPS_MAP_IDS.includes(App.mapSel) ? App.mapSel : 'vesper'); gl.shadows = 
 function buildMenu() {
   const box = $('#pick'); box.innerHTML = '';
   for (const h of HUNTERS_BY_ROLE) {
-    if (h === HUNTERS_BY_ROLE.find(x => HUNTERS[x].classe === HUNTERS[h].classe)) { const C = CLASSES[HUNTERS[h].classe]; box.insertAdjacentHTML('beforeend', `<div class="rolehd"><b style="color:${C.cor}">${C.icone} ${C.nome}</b><small>${C.desc}</small></div>`); }
+    if (h === HUNTERS_BY_ROLE.find(x => HUNTERS[x].classe === HUNTERS[h].classe)) { const C = CLASSES[HUNTERS[h].classe]; box.insertAdjacentHTML('beforeend', `<h3 class="rolehd"><b style="color:${C.cor}"><span aria-hidden="true">${C.icone}</span> ${C.nome}</b><small>${C.desc}</small></h3>`); }
     const H = HUNTERS[h], C = CLASSES[H.classe], F = FPS_HUNTERS[h];
     const d = document.createElement('div'); d.className = 'hcard' + (App.hunter === h ? ' sel' : '');
-    const cv = hunterPortraitFPS(h); d.appendChild(cv);
+    d.setAttribute('role', 'button'); d.tabIndex = 0; d.setAttribute('aria-pressed', App.hunter === h ? 'true' : 'false'); d.dataset.hk = h;
+    const cv = hunterPortraitFPS(h); cv.setAttribute('aria-hidden', 'true'); d.appendChild(cv);
     d.insertAdjacentHTML('beforeend', `<div class="hn">${H.nome}</div><div class="hc" style="color:${C.cor}">${C.icone} ${C.nome}</div>
       <div class="hab">${['c', 'q', 'e', 'x'].map(k => `<div><b>${k.toUpperCase()}</b> ${F[k].nome}<small>${k === 'x' ? FPS_ULT[h] + ' pontos' : F[k].free ? 'grátis · ' + F[k].free + ' por round' : F[k].preco + ' créditos'} — ${F[k].desc}</small></div>`).join('')}</div>`);
-    d.onclick = () => { App.hunter = h; try { localStorage.setItem('ruptura-fps-h', h); } catch (e) { } buildMenu(); };
+    d.onclick = () => { App.hunter = h; try { localStorage.setItem('ruptura-fps-h', h); } catch (e) { } buildMenu(); const n = $(`[data-hk="${h}"]`); if (n) n.focus(); announce(`${H.nome} escolhido.`); };
     box.appendChild(d);
   }
 }
@@ -61,12 +62,13 @@ function mapPreview(id) {
 }
 function mapCards(clickable) {
   const sel = App.mapSel;
-  return `<div class="mcard${sel === 'random' ? ' sel' : ''}" ${clickable ? 'data-map="random"' : ''}><div class="mprev rnd">?</div><b>Aleatório</b><small>Sorteia um dos 7 mapas</small></div>` +
-    FPS_MAP_IDS.map(id => { const m = FPS_MAPS[id]; return `<div class="mcard${sel === id ? ' sel' : ''}" ${clickable ? `data-map="${id}"` : ''} title="${esc(m.mec)}"><img class="mprev" src="${mapPreview(id)}" alt=""><b>${m.nome}</b><em>${m.tag}</em><small>${m.mec}</small></div>`; }).join('');
+  const btn = on => clickable ? `role="button" tabindex="0" aria-pressed="${on}"` : '';
+  return `<div class="mcard${sel === 'random' ? ' sel' : ''}" ${clickable ? 'data-map="random"' : ''} ${btn(sel === 'random')}><div class="mprev rnd" aria-hidden="true">?</div><b>Aleatório</b><small>Sorteia um dos 7 mapas</small></div>` +
+    FPS_MAP_IDS.map(id => { const m = FPS_MAPS[id]; return `<div class="mcard${sel === id ? ' sel' : ''}" ${clickable ? `data-map="${id}"` : ''} ${btn(sel === id)} title="${esc(m.mec)}"><img class="mprev" src="${mapPreview(id)}" alt=""><b>${m.nome}</b><em>${m.tag}</em><small>${m.mec}</small></div>`; }).join('');
 }
 function buildMaps() {
   $('#mpick').innerHTML = mapCards(true);
-  $('#mpick').querySelectorAll('[data-map]').forEach(d => d.onclick = () => { App.mapSel = d.dataset.map; try { localStorage.setItem('ruptura-fps-map', App.mapSel); } catch (e) { } buildMaps(); if (App.mapSel !== 'random') loadMap(App.mapSel); });
+  $('#mpick').querySelectorAll('[data-map]').forEach(d => d.onclick = () => { App.mapSel = d.dataset.map; try { localStorage.setItem('ruptura-fps-map', App.mapSel); } catch (e) { } buildMaps(); const n = $(`#mpick [data-map="${App.mapSel}"]`); if (n) n.focus(); if (App.mapSel !== 'random') loadMap(App.mapSel); });
 }
 function hunterPortraitFPS(h) {
   const c = document.createElement('canvas'); c.width = c.height = 90; const g = c.getContext('2d');
@@ -260,7 +262,7 @@ function renderRoom() {
     const el = $('#rt' + t);
     el.innerHTML = `<h4 style="color:${TEAM_COL[t]}">${ranked && !App.expect ? 'Seu grupo' : TEAM_NAME[t]}</h4>` + App.slots.slice(t * RULES.teamSize, (t + 1) * RULES.teamSize).map((x, k) => {
       const i = t * RULES.teamSize + k;
-      if (x.kind === 'empty') return ranked ? `<div class="rs empty off">${t === 0 && !App.expect ? '+ vaga do grupo (amigo entra pelo código)' : 'vaga (bot)'}</div>` : `<div class="rs empty" data-i="${i}">+ vaga (bot) — clique para entrar</div>`;
+      if (x.kind === 'empty') return ranked ? `<div class="rs empty off">${t === 0 && !App.expect ? '+ vaga do grupo (amigo entra pelo código)' : 'vaga (bot)'}</div>` : `<div class="rs empty" data-i="${i}" role="button" tabindex="0">+ vaga (bot) — clique para entrar</div>`;
       const nm = typeof Social !== "undefined" ? Social.shownName(x) : x.name;
       return `<div class="rs${x.pid === App.myPid ? ' me' : ''}">${x.rank != null ? `<canvas class="rsrk" data-rk="${x.rank}" title="${esc(rankName(x.rank))}"></canvas>` : ''}<div><b>${esc(nm)}${x.pid === App.myPid ? ' (você)' : x.pid === 'host' ? ' ★' : ''}</b><span>${HUNTERS[x.hunter].nome} · ${CLASSES[HUNTERS[x.hunter].classe].nome}${x.lvl ? ' · nível ' + x.lvl : ''}</span></div></div>`;
     }).join('');
@@ -270,7 +272,7 @@ function renderRoom() {
   renderQueue();
   $('#rmap').innerHTML = mapCards(App.role === 'host');
   if (App.role === 'host') $('#rmap').querySelectorAll('[data-map]').forEach(d => d.onclick = () => { App.mapSel = d.dataset.map; try { localStorage.setItem('ruptura-fps-map', App.mapSel); } catch (e) { } syncRoom(); });
-  $('#rpick').innerHTML = HUNTERS_BY_ROLE.map(h => `<button class="rh${App.hunter === h ? ' on' : ''}" data-h="${h}" style="--c:${CLASSES[HUNTERS[h].classe].cor}">${HUNTERS[h].nome}<small>${CLASSES[HUNTERS[h].classe].nome}</small></button>`).join('');
+  $('#rpick').innerHTML = HUNTERS_BY_ROLE.map(h => `<button class="rh${App.hunter === h ? ' on' : ''}" aria-pressed="${App.hunter === h}" data-h="${h}" style="--c:${CLASSES[HUNTERS[h].classe].cor}">${HUNTERS[h].nome}<small>${CLASSES[HUNTERS[h].classe].nome}</small></button>`).join('');
   $('#rpick').querySelectorAll('.rh').forEach(b => b.onclick = () => {
     App.hunter = b.dataset.h; try { localStorage.setItem('ruptura-fps-h', App.hunter); } catch (e) { }
     if (App.role === 'host') { const sl = App.slots.find(x => x.pid === 'host'); if (sl) sl.hunter = App.hunter; syncRoom(); }

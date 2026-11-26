@@ -13,6 +13,7 @@ const Social = {
     const m = $('#acctmsg');
     if (!Account.enabled) { m.textContent = Account.error || 'O login ainda não está configurado (js/firebase-config.js).'; return; }
     if (!Account.logged) { m.textContent = 'Entre com sua conta Google para jogar.'; this.login(); return; }
+    if (Account.needsConsent) { this.openLogin(true); return; }
     if (Account.needsNick) { this.openNick(true); return; }
     m.textContent = ''; fn();
   },
@@ -28,7 +29,28 @@ const Social = {
       hostRoom('ranked');
     });
   },
-  async login() { try { await Account.login(); } catch (e) { $('#acctmsg').textContent = e.message; } },
+  login() { this.openLogin(false); },
+  // janela de entrada: pede o aceite dos Termos e da Política antes do login com Google.
+  // Com again=true, é o novo aceite de quem já tem conta (termos atualizados).
+  openLogin(again) {
+    this.loginAgain = again;
+    $('#lg-title').textContent = again ? 'Atualizamos os Termos e a Política' : 'Entrar no Ruptura';
+    $('#lg-ok').textContent = again ? 'Aceitar e continuar' : 'Entrar com Google';
+    $('#lg-cancel').textContent = again ? 'Sair da conta' : 'Cancelar';
+    $('#lg-cons').checked = false; $('#lg-msg').textContent = '';
+    $('#login').dataset.esc = again ? 'no' : '';
+    $('#login').classList.add('show'); $('#lg-cons').focus();
+  },
+  async submitLogin() {
+    if (!$('#lg-cons').checked) { $('#lg-msg').textContent = 'Para continuar, marque que você leu e concorda com os Termos e a Política.'; $('#lg-cons').focus(); return; }
+    const b = $('#lg-ok'); b.disabled = true;
+    try {
+      await Account.giveConsent();
+      if (!this.loginAgain) await Account.login();
+      $('#login').classList.remove('show');
+    } catch (e) { $('#lg-msg').textContent = e.message; }
+    b.disabled = false;
+  },
   presence(status) {
     if (this.local || !Account.logged) return;
     Account.presence({ status, room: status === 'room' && App.code ? App.code : null });
@@ -52,16 +74,16 @@ const Social = {
       return;
     }
     const need = xpNeed(P.level), badge = Account.incoming.length + Account.invites.length;
-    el.innerHTML = `<canvas id="ac-emb" width="46" height="46" title="${esc(rankName(P.rank))}"></canvas>
+    el.innerHTML = `<canvas id="ac-emb" width="46" height="46" title="${esc(rankName(P.rank))}" role="img" aria-label="Ranque: ${esc(rankName(P.rank))}"></canvas>
       <div class="acinfo"><b>${P.nickSet ? `${esc(P.name)}<span>#${esc(P.tag)}</span>` : 'Escolha seu ID'}</b><small>Nível ${P.level} · ${esc(rankName(P.rank))}</small><div class="xpb"><i style="width:${Math.min(100, P.xp / need * 100)}%"></i></div></div>
-      <button class="btn" id="ac-fr">Amigos${badge ? `<em>${badge}</em>` : ''}</button><button class="btn" id="ac-pf">Perfil</button><button class="btn ghost" id="ac-out" title="Sair da conta">Sair</button>`;
+      <button class="btn" id="ac-fr">Amigos${badge ? `<em aria-label="${badge} novidades">${badge}</em>` : ''}</button><button class="btn" id="ac-pf">Perfil</button><button class="btn ghost" id="ac-out" title="Sair da conta">Sair</button>`;
     drawRankEmblem($('#ac-emb').getContext('2d'), P.rank, 46);
     $('#ac-fr').onclick = () => this.toggle('friends');
     $('#ac-pf').onclick = () => this.toggle('profile');
     $('#ac-out').onclick = () => { this.close(); Account.logout(); };
   },
   refreshButtons() {
-    const ok = this.local || (Account.logged && !Account.needsNick);
+    const ok = this.local || (Account.logged && !Account.needsNick && !Account.needsConsent);
     for (const id of ['#btn-play', '#btn-host', '#btn-join', '#btn-ranked']) $(id).classList.toggle('locked', !ok);
     const rb = $('#btn-ranked');
     if (ok && !this.local) { const b = this.rankedBlock(); rb.classList.toggle('locked', !!b); rb.title = b || 'Ranqueada 5v5 · primeiro a 7'; }
@@ -74,9 +96,12 @@ const Social = {
     $('#nk-tag').value = P.nickSet ? P.tag : randomTag();
     $('#nk-msg').textContent = first ? 'Antes de jogar, escolha o ID que seus amigos vão usar para te adicionar.' : '';
     $('#nk-cancel').style.display = first ? 'none' : '';
+    $('#nk-conslbl').style.display = P.nickSet ? 'none' : ''; $('#nk-cons').checked = !!P.nickSet;
+    $('#nick').dataset.esc = first ? 'no' : '';
     $('#nick').classList.add('show'); $('#nk-name').focus();
   },
   async confirmNick() {
+    if (!$('#nk-cons').checked) { $('#nk-msg').textContent = 'Para continuar, marque que você concorda que o ID fique visível para outros jogadores.'; $('#nk-cons').focus(); return; }
     const b = $('#nk-ok'); b.disabled = true; $('#nk-msg').textContent = 'Reservando...';
     try { await Account.claimNick($('#nk-name').value, $('#nk-tag').value); $('#nick').classList.remove('show'); }
     catch (e) { $('#nk-msg').textContent = e.message; }
@@ -84,29 +109,33 @@ const Social = {
   },
 
   // ---------------- painel lateral ----------------
-  toggle(p) { this.panel = this.panel === p ? null : p; this.renderSide(); },
-  close() { this.panel = null; this.renderSide(); },
+  toggle(p) { this.panel = this.panel === p ? null : p; this._focusSide = !!this.panel; this._ret = document.activeElement; this.renderSide(); },
+  close() { const was = this.panel; this.panel = null; this.renderSide(); if (was && this._ret && this._ret.focus) this._ret.focus(); },
   renderSide() {
     const el = $('#side');
     el.classList.toggle('show', !!this.panel && Account.logged);
     if (!this.panel || !Account.logged) return;
     if (this.panel === 'friends') this.renderFriends(el); else this.renderProfile(el);
+    if (this._focusSide) { this._focusSide = false; const h = el.querySelector('h2'); if (h) h.focus(); }
   },
   renderFriends(el) {
     const inRoom = App.tr && (App.role === 'host' || App.role === 'client') && !App.G;
     const fr = Account.friends.slice().sort((a, b) => (this.online(b) ? 1 : 0) - (this.online(a) ? 1 : 0) || a.name.localeCompare(b.name));
-    let h = `<div class="sdhead"><h3>Amigos</h3><button class="btn ghost" data-a="close">✕</button></div>
+    let h = `<div class="sdhead"><h2 tabindex="-1">Amigos</h2><button class="btn ghost" data-a="close" aria-label="Fechar painel">✕</button></div>
       <div class="myid">Seu ID: <b>${esc(Account.fullId)}</b> <button class="btn ghost sm" data-a="copyid">Copiar</button></div>
-      <div class="addf"><input id="fr-id" placeholder="Nome#TAG" maxlength="22" autocomplete="off"><button class="btn gold" data-a="add">Adicionar</button></div><div class="mdmsg" id="fr-msg"></div>`;
-    if (Account.incoming.length) h += `<h4>Pedidos recebidos</h4>` + Account.incoming.map(r => `<div class="fr"><div><b>${esc(r.fromName)}<span>#${esc(r.fromTag)}</span></b></div><button class="btn gold sm" data-a="acc" data-id="${r.id}">Aceitar</button><button class="btn ghost sm" data-a="dec" data-id="${r.id}">Recusar</button></div>`).join('');
-    if (Account.outgoing.length) h += `<h4>Pedidos enviados</h4>` + Account.outgoing.map(r => `<div class="fr dim"><div><b>${esc(r.toName)}<span>#${esc(r.toTag)}</span></b><small>aguardando</small></div><button class="btn ghost sm" data-a="dec" data-id="${r.id}">Cancelar</button></div>`).join('');
-    h += `<h4>Amigos (${fr.length})</h4>` + (fr.length ? fr.map(f => {
+      <label for="fr-id" class="flbl">Adicionar amigo pelo ID</label>
+      <div class="addf"><input id="fr-id" placeholder="Nome#TAG" maxlength="22" autocomplete="off" aria-describedby="fr-uso"><button class="btn gold" data-a="add">Adicionar</button></div>
+      <small class="zmut" id="fr-uso">O ID serve só para encontrar o jogador e enviar o pedido. Ele vê seu ID, nível, ranque e status. <button class="lnk" data-page="privacidade">Privacidade</button></small>
+      <div class="mdmsg" id="fr-msg" role="status" aria-live="polite"></div>`;
+    if (Account.incoming.length) h += `<h3>Pedidos recebidos</h3>` + Account.incoming.map(r => `<div class="fr"><div><b>${esc(r.fromName)}<span>#${esc(r.fromTag)}</span></b></div><button class="btn gold sm" data-a="acc" data-id="${r.id}">Aceitar</button><button class="btn ghost sm" data-a="dec" data-id="${r.id}">Recusar</button></div>`).join('');
+    if (Account.outgoing.length) h += `<h3>Pedidos enviados</h3>` + Account.outgoing.map(r => `<div class="fr dim"><div><b>${esc(r.toName)}<span>#${esc(r.toTag)}</span></b><small>aguardando</small></div><button class="btn ghost sm" data-a="dec" data-id="${r.id}">Cancelar</button></div>`).join('');
+    h += `<h3>Amigos (${fr.length})</h3>` + (fr.length ? fr.map(f => {
       const on = this.online(f), st = on ? this.STATUS[f.pres.status] || 'Online' : 'Offline';
       const canJoin = on && f.pres.status === 'room' && f.pres.room && f.pres.room !== App.code;
-      return `<div class="fr${on ? '' : ' dim'}"><i class="dot${on ? ' on' : ''}"></i><div><b>${esc(f.name)}<span>#${esc(f.tag)}</span></b><small>${st}${f.pres && f.pres.level ? ' · nível ' + f.pres.level : ''}${f.pres && f.pres.rank >= 0 ? ' · ' + esc(rankName(f.pres.rank)) : ''}</small></div>
-        ${inRoom && on ? `<button class="btn sm" data-a="inv" data-u="${f.uid}">Convidar</button>` : ''}${canJoin ? `<button class="btn gold sm" data-a="join" data-u="${f.uid}">Entrar</button>` : ''}<button class="btn ghost sm" data-a="rem" data-u="${f.uid}" title="Remover amigo">✕</button></div>`;
+      return `<div class="fr${on ? '' : ' dim'}"><i class="dot${on ? ' on' : ''}" aria-hidden="true"></i><div><b>${esc(f.name)}<span>#${esc(f.tag)}</span></b><small>${st}${f.pres && f.pres.level ? ' · nível ' + f.pres.level : ''}${f.pres && f.pres.rank >= 0 ? ' · ' + esc(rankName(f.pres.rank)) : ''}</small></div>
+        ${inRoom && on ? `<button class="btn sm" data-a="inv" data-u="${f.uid}">Convidar</button>` : ''}${canJoin ? `<button class="btn gold sm" data-a="join" data-u="${f.uid}">Entrar</button>` : ''}<button class="btn ghost sm" data-a="rem" data-u="${f.uid}" title="Remover amigo" aria-label="Remover ${esc(f.name)}#${esc(f.tag)} dos amigos">✕</button></div>`;
     }).join('') : '<div class="hint">Adicione amigos pelo ID (Nome#TAG).</div>');
-    h += `<h4>Privacidade</h4><label class="chk"><input type="checkbox" data-a="hidenames" ${FS.hideNames ? 'checked' : ''}> Esconder nomes dos outros jogadores (modo streamer)</label>
+    h += `<h3>Privacidade</h3><label class="chk"><input type="checkbox" data-a="hidenames" ${FS.hideNames ? 'checked' : ''}> Esconder nomes dos outros jogadores (modo streamer)</label>
       <label class="chk"><input type="checkbox" data-a="hidecode" ${FS.hideCode ? 'checked' : ''}> Esconder o código da sala por padrão</label>`;
     el.innerHTML = h;
     const msg = t => { $('#fr-msg').textContent = t || ''; };
@@ -143,25 +172,47 @@ const Social = {
     const fav = Object.entries(P.hunters).sort((a, b) => b[1].m - a[1].m).slice(0, 3);
     const MN = { training: 'Contra bots', standard: 'Sala', ranked: 'Ranqueada', fps: 'Modo tático' };
     const rankLine = P.placements < 5 ? `Partidas de colocação: ${P.placements}/5` : `${P.rr} / 100 RR`;
-    el.innerHTML = `<div class="sdhead"><h3>Perfil</h3><button class="btn ghost" data-a="close">✕</button></div>
-      <div class="pftop"><canvas id="pf-emb" width="120" height="120"></canvas><div><b class="pfn">${esc(P.name)}<span>#${esc(P.tag)}</span></b><button class="btn ghost sm" data-a="nick">Alterar ID</button>
+    el.innerHTML = `<div class="sdhead"><h2 tabindex="-1">Perfil</h2><button class="btn ghost" data-a="close" aria-label="Fechar painel">✕</button></div>
+      <div class="pftop"><canvas id="pf-emb" width="120" height="120" role="img" aria-label="Emblema: ${esc(rankName(P.rank))}"></canvas><div><b class="pfn">${esc(P.name)}<span>#${esc(P.tag)}</span></b><button class="btn ghost sm" data-a="nick">Alterar ID</button>
         <div class="pfr">${esc(rankName(P.rank))}</div><small>${rankLine}${P.peak >= 0 ? ' · pico: ' + esc(rankName(P.peak)) : ''}</small>
         ${P.placements >= 5 ? `<div class="xpb rr"><i style="width:${Math.min(100, P.rr)}%"></i></div>` : ''}</div></div>
       <div class="pfst"><div><b>${P.level}</b><small>Nível</small></div><div><b>${s.matches}</b><small>Partidas</small></div><div><b>${wr}%</b><small>Vitórias</small></div><div><b>${kd}</b><small>Abates/Mortes</small></div><div><b>${s.matches ? Math.round(s.dmg / s.matches) : 0}</b><small>Dano/partida</small></div></div>
       ${P.level < (window.RANKED_MIN_LEVEL || 15) ? `<div class="hint">A Ranqueada libera no nível ${window.RANKED_MIN_LEVEL || 15}.</div>` : ''}
-      <h4>Caçadores favoritos</h4>${fav.length ? fav.map(([h, v]) => `<div class="fav"><b>${HUNTERS[h] ? HUNTERS[h].nome : h}</b><small>${v.m} partidas · ${Math.round(v.w / v.m * 100)}% vitórias · ${v.k} abates</small></div>`).join('') : '<div class="hint">Jogue algumas partidas.</div>'}
-      <h4>Últimas partidas</h4><table class="hist"><tr><th>Modo</th><th></th><th>Placar</th><th>Caçador</th><th>A/M</th><th>RR</th></tr>
-      ${P.history.map(m => `<tr><td>${MN[m.mode] || m.mode}</td><td class="${m.won ? 'win' : 'loss'}">${m.won ? 'V' : 'D'}</td><td>${m.sc[0]}×${m.sc[1]}</td><td>${HUNTERS[m.h] ? HUNTERS[m.h].nome : ''}</td><td>${m.k}/${m.d}</td><td>${m.mode === 'ranked' ? (m.pl ? `col. ${m.pl}/5` : (m.rr >= 0 ? '+' : '') + m.rr) : '—'}</td></tr>`).join('')}</table>`;
+      <h3>Caçadores favoritos</h3>${fav.length ? fav.map(([h, v]) => `<div class="fav"><b>${HUNTERS[h] ? HUNTERS[h].nome : h}</b><small>${v.m} partidas · ${Math.round(v.w / v.m * 100)}% vitórias · ${v.k} abates</small></div>`).join('') : '<div class="hint">Jogue algumas partidas.</div>'}
+      <h3>Últimas partidas</h3><table class="hist"><caption class="sr-only">Últimas partidas</caption><tr><th scope="col">Modo</th><th scope="col"><span class="sr-only">Resultado</span></th><th scope="col">Placar</th><th scope="col">Caçador</th><th scope="col">Abates/Mortes</th><th scope="col">RR</th></tr>
+      ${P.history.map(m => `<tr><td>${MN[m.mode] || m.mode}</td><td class="${m.won ? 'win' : 'loss'}"><abbr title="${m.won ? 'Vitória' : 'Derrota'}">${m.won ? 'V' : 'D'}</abbr></td><td>${m.sc[0]}×${m.sc[1]}</td><td>${HUNTERS[m.h] ? HUNTERS[m.h].nome : ''}</td><td>${m.k}/${m.d}</td><td>${m.mode === 'ranked' ? (m.pl ? `col. ${m.pl}/5` : (m.rr >= 0 ? '+' : '') + m.rr) : '—'}</td></tr>`).join('')}</table>
+      <h3>Seus dados</h3>
+      <p class="zmut small">Pela LGPD você pode baixar uma cópia dos seus dados ou excluir sua conta quando quiser. <button class="lnk" data-page="privacidade">Política de Privacidade</button></p>
+      <div class="zrow"><button class="btn" data-a="export">Baixar meus dados</button><button class="btn danger" data-a="delete">Excluir minha conta</button></div>
+      <div class="mdmsg" id="pf-msg" role="status" aria-live="polite"></div>`;
     drawRankEmblem($('#pf-emb').getContext('2d'), P.rank, 120);
     el.querySelector('[data-a=close]').onclick = () => this.close();
     el.querySelector('[data-a=nick]').onclick = () => this.openNick(false);
+    el.querySelector('[data-a=export]').onclick = async () => {
+      const m = $('#pf-msg'); m.textContent = 'Juntando seus dados...';
+      try {
+        const data = await Account.exportData();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+        a.download = `ruptura-meus-dados-${Account.profile.name}.json`; document.body.appendChild(a); a.click(); a.remove();
+        m.textContent = 'Arquivo baixado.';
+      } catch (e) { m.textContent = 'Não consegui baixar: ' + e.message; }
+    };
+    el.querySelector('[data-a=delete]').onclick = async () => {
+      const m = $('#pf-msg');
+      const t = prompt('Isso apaga para sempre seu perfil, ID, ranque, amigos e a conta de login do Ruptura. Para confirmar, digite EXCLUIR:');
+      if (!t || t.trim().toUpperCase() !== 'EXCLUIR') { m.textContent = 'Exclusão cancelada.'; return; }
+      m.textContent = 'Excluindo...';
+      try { if (App.tr) leaveRoom(); await Account.deleteAccount(); this.close(); announce('Sua conta foi excluída.'); $('#acctmsg').textContent = 'Sua conta foi excluída. Obrigado por ter jogado.'; }
+      catch (e) { m.textContent = 'Não consegui excluir: ' + e.message + '. Se continuar, escreva para ' + ZART.email + '.'; }
+    };
   },
 
   // ---------------- convites ----------------
   renderInvites() {
     const el = $('#invites');
     const inv = Account.invites.filter(i => Date.now() - i.t < 120000);
-    el.innerHTML = inv.map(i => `<div class="inv"><div><b>${esc(i.fromName)}<span>#${esc(i.fromTag)}</span></b><small>te convidou para ${/:R$/.test(i.code) ? 'a Ranqueada' : 'uma sala'}</small></div><button class="btn gold sm" data-j="${i.id}">Entrar</button><button class="btn ghost sm" data-x="${i.id}">✕</button></div>`).join('');
+    el.innerHTML = inv.map(i => `<div class="inv"><div><b>${esc(i.fromName)}<span>#${esc(i.fromTag)}</span></b><small>te convidou para ${/:R$/.test(i.code) ? 'a Ranqueada' : 'uma sala'}</small></div><button class="btn gold sm" data-j="${i.id}">Entrar</button><button class="btn ghost sm" data-x="${i.id}" aria-label="Recusar convite">✕</button></div>`).join('');
     el.querySelectorAll('[data-j]').forEach(b => b.onclick = () => { const i = Account.invites.find(x => x.id === b.dataset.j); if (i) { Account.dropInvite(i); this.joinCode(i.code); } });
     el.querySelectorAll('[data-x]').forEach(b => b.onclick = () => { const i = Account.invites.find(x => x.id === b.dataset.x); if (i) Account.dropInvite(i); });
   },
@@ -188,14 +239,16 @@ $('#btn-host').onclick = () => Social.guard(() => hostRoom('custom'));
 $('#btn-join').onclick = () => Social.guard(() => joinRoom($('#in-code').value));
 $('#in-code').onkeydown = e => { if (e.key === 'Enter') $('#btn-join').click(); };
 $('#btn-ranked').onclick = () => Social.ranked();
-$('#nk-ok').onclick = () => Social.confirmNick();
+$('#nk-form').onsubmit = e => { e.preventDefault(); Social.confirmNick(); };
 $('#nk-cancel').onclick = () => $('#nick').classList.remove('show');
-$('#nk-tag').onkeydown = $('#nk-name').onkeydown = e => { if (e.key === 'Enter') Social.confirmNick(); };
+$('#lg-form').onsubmit = e => { e.preventDefault(); Social.submitLogin(); };
+$('#lg-cancel').onclick = () => { $('#login').classList.remove('show'); if (Social.loginAgain) Account.logout(); };
 App.hideCode = !!FS.hideCode;
 
 Account.on(() => {
   Social.renderBar(); Social.refreshButtons(); Social.renderSide();
-  if (Account.needsNick && !$('#nick').classList.contains('show')) Social.openNick(true);
+  if (Account.needsConsent) { if (!$('#login').classList.contains('show')) Social.openLogin(true); }
+  else if (Account.needsNick && !$('#nick').classList.contains('show')) Social.openNick(true);
   if (!Social.local && !Account.logged && App.tr && !App.G) leaveRoom();
   if (Account.error) $('#acctmsg').textContent = Account.error;
 });

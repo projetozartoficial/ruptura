@@ -1,6 +1,8 @@
-# RUPTURA — Caçadores do Abismo
+# Ruptura, da Zart Jogos
 
-FPS tático 5v5 de navegador, com contas Google, amigos, Ranqueada e partidas online (bots completam as vagas vazias).
+**Ruptura — Caçadores do Abismo.** Um projeto do grupo Zart.
+
+Jogo de tiro tático 5v5 de navegador, gratuito, com contas Google, amigos, Ranqueada e partidas online (bots completam as vagas vazias).
 
 **Jogar:** https://wasmorf.github.io/Ruptura/
 
@@ -52,6 +54,15 @@ FPS tático em primeira pessoa, 5 contra 5.
 - **Resolução automática** (ligada por padrão): se o FPS cair abaixo de ~55, a resolução interna baixa um pouco; quando sobra folga, volta a subir.
 - **Mostrar FPS** nas configurações para acompanhar.
 
+## Privacidade e regras (LGPD e CDC)
+O jogo segue o padrão do Grupo Zart. Tudo fica no rodapé do menu:
+- **Termos de Uso**, **Política de Privacidade**, **Cookies e armazenamento**, **Política de Reembolso** (o jogo não vende nada) e **Sobre o Grupo Zart**.
+- **Aviso de privacidade** na primeira visita (aceitar/recusar). Sem análise, anúncios ou rastreamento; o único item opcional são as fontes do Google Fonts, que só carregam se a pessoa aceitar.
+- **Entrada com aceite:** antes do login com Google a pessoa marca que leu e concorda com os Termos e a Política (a data do aceite fica no perfil). Quando `TERMS_VERSION` muda em `js/firebase-config.js`, todo mundo aceita de novo.
+- **Direitos do titular** no Perfil → Seus dados: **Baixar meus dados** (JSON) e **Excluir minha conta** (apaga perfil, ID, amigos, convites e a conta de login).
+- O jogo não usa o nome, o e-mail nem a foto do Google: o jogador escolhe o próprio ID.
+- Responsável: **Grupo Zart** · projetozart@gmail.com
+
 ## Configurar as contas (Firebase)
 Só joga quem conectar a conta Google.
 1. Crie um projeto em https://console.firebase.google.com.
@@ -63,6 +74,7 @@ Só joga quem conectar a conta Google.
 O multiplayer é P2P (WebRTC): quem cria a sala roda a partida, e a conexão entre os jogadores é combinada pelo Firestore.
 
 ## Arquivos
+- `zart/` — logo e ícone do Grupo Zart
 - `index.html` — página do jogo (`fps.html` só redireciona para ela)
 
 **`fps/`**
@@ -75,6 +87,7 @@ O multiplayer é P2P (WebRTC): quem cria a sala roda a partida, e a conexão ent
 - `net.js` — rede (previsão de movimento, interpolação, compensação de atraso)
 - `main.js` — menus, salas, fila da Ranqueada, loja, HUD e laço do jogo
 - `social.js` — login, ID, perfil, amigos, convites e privacidade
+- `legal.js` — páginas legais, aviso de privacidade e acessibilidade (padrão Zart)
 
 **`js/`**
 - `data.js` — classes e caçadores (nomes, cores e história)

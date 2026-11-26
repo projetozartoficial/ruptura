@@ -285,9 +285,15 @@ const Account = {
   ref() { return this.db.collection('users').doc(this.user.uid); },
   async loadRemote() {
     const snap = await this.ref().get();
-    if (snap.exists) this.profile = fixProfile(snap.data(), this.user.displayName);
+    // o nome da conta Google não é usado: o jogador escolhe o próprio ID (Nome#TAG)
+    if (snap.exists) {
+      this.profile = fixProfile(snap.data());
+      const c = this.pendingConsent; // aceitou os termos na janela de entrada agora
+      if (c && !(this.profile.consent && this.profile.consent.v === c.v)) { this.profile.consent = c; await this.save(); }
+    }
     else {
-      this.profile = newProfile((this.user.displayName || 'Caçador').split(' ')[0].replace(/[^\p{L}\p{N}_]/gu, '').slice(0, 14));
+      this.profile = newProfile();
+      const c = this.pendingConsent; if (c) this.profile.consent = c;
       await this.save();
     }
   },
@@ -295,6 +301,48 @@ const Account = {
     const p = this.profile; p.updated = Date.now();
     if (this.user && this.db) { await this.ref().set(JSON.parse(JSON.stringify(p))); }
     else { this.local = p; try { localStorage.setItem('ruptura-profile', JSON.stringify(p)); } catch (e) { } }
+  },
+  // ---------- LGPD: consentimento, baixar dados e excluir conta ----------
+  get needsConsent() { return this.logged && !(this.profile.consent && this.profile.consent.v === window.TERMS_VERSION); },
+  async giveConsent() {
+    const c = { v: window.TERMS_VERSION, t: Date.now() };
+    this.pendingConsent = c;
+    if (this.logged) { this.profile.consent = c; await this.save(); this.emit(); }
+  },
+  async exportData() {
+    const P = JSON.parse(JSON.stringify(this.profile)), uid = this.user.uid;
+    const reqs = async (f, v) => (await this.db.collection('friendReqs').where(f, '==', v).get()).docs.map(d => d.data());
+    const sent = await reqs('from', uid), got = await reqs('to', uid);
+    const pres = await this.db.collection('presence').doc(uid).get();
+    return {
+      gerado_em: new Date().toISOString(), jogo: 'Ruptura (Zart Jogos)', id_da_conta: uid,
+      conta_google_usada_no_login: { email: this.user.email || null, observacao: 'Guardado pelo serviço de login (Firebase Authentication). O jogo não mostra esse dado.' },
+      perfil: P, presenca: pres.exists ? pres.data() : null,
+      amigos: sent.filter(r => r.status === 'accepted').map(r => r.toName + '#' + r.toTag).concat(got.filter(r => r.status === 'accepted').map(r => r.fromName + '#' + r.fromTag)),
+      pedidos_enviados: sent.filter(r => r.status === 'pending').map(r => r.toName + '#' + r.toTag),
+      pedidos_recebidos: got.filter(r => r.status === 'pending').map(r => r.fromName + '#' + r.fromTag),
+    };
+  },
+  // apaga tudo do jogador no banco e depois a conta de login
+  async deleteAccount() {
+    const db = this.db, uid = this.user.uid, P = this.profile;
+    this.stopSocial();
+    const del = async q => { const s = await q.get(); await Promise.all(s.docs.map(d => d.ref.delete().catch(() => { }))); };
+    await del(db.collection('friendReqs').where('from', '==', uid));
+    await del(db.collection('friendReqs').where('to', '==', uid));
+    await del(db.collection('invites').where('from', '==', uid));
+    await del(db.collection('invites').where('to', '==', uid));
+    if (P.nickSet && P.tag) await db.collection('nicks').doc(nickKey(P.name, P.tag)).delete().catch(() => { });
+    await db.collection('presence').doc(uid).delete().catch(() => { });
+    await this.ref().delete();
+    const u = firebase.auth().currentUser;
+    try { await u.delete(); }
+    catch (e) {
+      if (e.code !== 'auth/requires-recent-login') throw e;
+      await u.reauthenticateWithPopup(new firebase.auth.GoogleAuthProvider());
+      await u.delete();
+    }
+    try { localStorage.removeItem('ruptura-profile'); localStorage.removeItem('ruptura-name'); } catch (e) { }
   },
   async setName(n) { if (!n || this.profile.name === n) return; this.profile.name = n; try { await this.save(); } catch (e) { } this.emit(); },
   summary() { const p = this.profile; return { uid: this.user ? this.user.uid : null, tag: p.tag || '', level: p.level, rank: p.rank, mmr: p.mmr, placements: p.placements }; },
